@@ -2,7 +2,7 @@ import flet as ft
 from components.data_classes import DoubleRatchetState
 from components.data_classes import PartyState
 from modules.messaging.double_ratchet.key_history import get_key_tooltip_text
-from modules.messaging.messaging_base_view import is_party_visible
+from modules.messaging.messaging_base_view import is_party_visible, build_key_field
 from modules.base_view import format_key, last_n_chars, make_copy_handler
 from modules.tooltip_helpers import build_tooltip_text, get_tooltip_messages
 
@@ -29,25 +29,14 @@ def _build_party_panel(
     cks_full = format_key(party.CKs)
     ckr_full = format_key(party.CKr)
 
-    def _key_field(label: str, full_value: str, copy_value: str | None = None) -> ft.Control:
-        display = last_n_chars(full_value, 8) if visible else "Hidden"
-        cv = copy_value if copy_value is not None else full_value
-        return build_tooltip_text(
-            label,
-            display,
-            tooltips.get(label, ""),
-            full_value=full_value if visible else None,
-            on_click=make_copy_handler(page, label, cv) if visible else None,
-        )
-
     panel_controls = [
         ft.Text(header, size=18, weight="bold", text_align=ft.TextAlign.LEFT),
-        _key_field("DHs_pub", dhs_public_full),
-        _key_field("DHs_priv", dhs_private_full),
-        _key_field("DHr", dhr_full),
-        _key_field("RK", rk_full),
-        _key_field("CKs", cks_full),
-        _key_field("CKr", ckr_full),
+        build_key_field(page, visible, "DHs_pub", dhs_public_full, tooltips.get("DHs_pub", "")),
+        build_key_field(page, visible, "DHs_priv", dhs_private_full, tooltips.get("DHs_priv", "")),
+        build_key_field(page, visible, "DHr", dhr_full, tooltips.get("DHr", "")),
+        build_key_field(page, visible, "RK", rk_full, tooltips.get("RK", "")),
+        build_key_field(page, visible, "CKs", cks_full, tooltips.get("CKs", "")),
+        build_key_field(page, visible, "CKr", ckr_full, tooltips.get("CKr", "")),
         build_tooltip_text("Ns", str(party.Ns), tooltips.get("Ns", "")),
         build_tooltip_text("Nr", str(party.Nr), tooltips.get("Nr", "")),
         build_tooltip_text("PN", str(party.PN), tooltips.get("PN", "")),
@@ -103,34 +92,16 @@ def _build_used_keys_history_panel(page: ft.Page, party: PartyState, perspective
                     pub_label = f"DHs_pub#{event.key_number} ({event.created_at_step})"
                     priv_label = f"DHs_priv#{event.key_number} ({event.created_at_step})"
                     panel_controls.append(
-                        build_tooltip_text(
-                            pub_label,
-                            last_n_chars(public_text, 10),
-                            get_key_tooltip_text(event),
-                            full_value=public_text,
-                            on_click=make_copy_handler(page, f"{party.name} {pub_label}", public_text),
-                        )
+                        build_key_field(page, visible, pub_label, public_text, get_key_tooltip_text(event))
                     )
                     panel_controls.append(
-                        build_tooltip_text(
-                            priv_label,
-                            last_n_chars(private_text, 10),
-                            get_key_tooltip_text(event),
-                            full_value=private_text,
-                            on_click=make_copy_handler(page, f"{party.name} {priv_label}", private_text),
-                        )
+                        build_key_field(page, visible, priv_label, private_text, get_key_tooltip_text(event))
                     )
                 else:
                     key_text = event.key_value.hex() if isinstance(event.key_value, bytes) else str(event.key_value)
                     label = f"{event.key_type}#{event.key_number} ({event.created_at_step})"
                     panel_controls.append(
-                        build_tooltip_text(
-                            label,
-                            last_n_chars(key_text, 10),
-                            get_key_tooltip_text(event),
-                            full_value=key_text,
-                            on_click=make_copy_handler(page, f"{party.name} {label}", key_text),
-                        )
+                        build_key_field(page, visible, label, key_text, get_key_tooltip_text(event))
                     )
 
     return ft.Container(

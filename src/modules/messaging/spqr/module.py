@@ -24,6 +24,11 @@ from components.data_classes import (
     SpqrSessionState,
 )
 from modules.messaging.messaging_base_module import MessagingBaseModule
+from modules.messaging.spqr.key_history import (
+    initialize_key_history,
+    track_keys_from_send_step,
+    track_keys_from_receive_step,
+)
 from modules.messaging.spqr.logic import (
     Ct1Acknowledged,
     Ct1Received,
@@ -109,6 +114,7 @@ class SPQRModule(MessagingBaseModule):
         self._reset_session()
 
     def _class_map(self) -> dict[str, type]:
+        from components.data_classes import KeyHistory
         return {
             "SpqrMessageType": SpqrMessageType,
             "SpqrSckaMessage": SpqrSckaMessage,
@@ -125,6 +131,7 @@ class SPQRModule(MessagingBaseModule):
             "SckaReceiveResult": SckaReceiveResult,
             "SpqrMessageState": SpqrMessageState,
             "SpqrSessionState": SpqrSessionState,
+            "KeyHistory": KeyHistory,
             "KeysUnsampled": KeysUnsampled,
             "KeysSampled": KeysSampled,
             "HeaderSent": HeaderSent,
@@ -145,6 +152,7 @@ class SPQRModule(MessagingBaseModule):
             bob=RatchetInitBobSCKA(shared_secret),
             message_log=[],
         )
+        initialize_key_history(self.session)
         self.pending_messages = []
         self._next_pending_id = 1
         self._send_steps.clear()
@@ -309,6 +317,10 @@ class SPQRModule(MessagingBaseModule):
             cipher,
             encrypt_trace,
         )
+
+        # Track key generation from this send step
+        track_keys_from_send_step(sender_state, sender_name, pending_id, before, after)
+
         return pending
 
     def receive_message(self, recipient: str, pending_id: int) -> SpqrMessageState | None:
@@ -352,6 +364,9 @@ class SPQRModule(MessagingBaseModule):
             plaintext,
             receive_trace,
         )
+
+        # Track key generation from this receive step
+        track_keys_from_receive_step(recipient_state, target, pending_id, before, after)
 
         return message
 

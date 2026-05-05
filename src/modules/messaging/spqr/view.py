@@ -3,8 +3,10 @@
 import flet as ft
 
 from components.data_classes import SpqrSessionState, SpqrRatchetState
-from modules.base_view import format_key, last_n_chars, make_copy_handler
-from modules.messaging.messaging_base_view import is_party_visible
+from modules.base_view import format_key
+from modules.messaging.messaging_base_view import is_party_visible, build_key_field
+from modules.messaging.spqr.key_history import get_key_tooltip_text
+from modules.tooltip_helpers import get_tooltip_messages
 
 SIDE_PANEL_WIDTH = 430
 
@@ -39,28 +41,17 @@ def _build_party_panel(
     send_ck, recv_ck = _active_chain_values(state)
     state_name = type(state.scka_state.node).__name__ if state.scka_state is not None and state.scka_state.node is not None else "None"
 
-    def _field(label: str, value: str, copy_value: str | None = None) -> ft.Control:
-        display = last_n_chars(value, 8) if visible and value not in {"None", ""} else (value if visible else "Hidden")
-        return ft.Row(
-            [
-                ft.Text(f"{label}: ", weight=ft.FontWeight.W_600),
-                ft.TextButton(
-                    display,
-                    on_click=make_copy_handler(page, f"{party_name} {label}", copy_value or value),
-                    disabled=not visible or not value or value == "None",
-                ),
-            ],
-            spacing=2,
-        )
+    tooltips = get_tooltip_messages("spqr")
+    rk_full = format_key(state.RK)
 
     controls: list[ft.Control] = [
         ft.Text(party_name, size=18, weight="bold"),
         ft.Text(f"Direction: {state.direction}"),
         ft.Text(f"Epoch: {state.epoch}"),
         ft.Text(f"SCKA state: {state_name}"),
-        _field("RK", format_key(state.RK)),
-        _field("CK_send", send_ck),
-        _field("CK_recv", recv_ck),
+        build_key_field(page, visible, "RK", rk_full, tooltips.get("RK", "")),
+        build_key_field(page, visible, "CK_send", send_ck, tooltips.get("CK_send", "")),
+        build_key_field(page, visible, "CK_recv", recv_ck, tooltips.get("CK_recv", "")),
         ft.Text(f"Skipped MK epochs: {len(state.MKSKIPPED)}"),
     ]
 
@@ -71,6 +62,61 @@ def _build_party_panel(
         content=ft.Column(controls, spacing=4, tight=True),
         width=SIDE_PANEL_WIDTH,
         padding=10,
+    )
+
+
+def _build_used_keys_history_panel(page: ft.Page, state: SpqrRatchetState, party_name: str, perspective: str) -> ft.Control:
+    visible = is_party_visible(perspective, party_name)
+
+    panel_controls: list[ft.Control] = [
+        ft.Row(
+            [
+                ft.Text("Used keys history", weight="bold", size=14),
+            ],
+            spacing=2,
+        ),
+    ]
+
+    if not visible:
+        panel_controls.append(ft.Text("Hidden", color=ft.Colors.OUTLINE))
+    else:
+        sections: list[tuple[str, list]] = [
+            ("RK", state.key_history.rk_events),
+            ("CK_s", state.key_history.cks_events),
+            ("CK_r", state.key_history.ckr_events),
+        ]
+
+        for section_label, events in sections:
+            panel_controls.append(ft.Text(section_label, weight="bold", size=12))
+            ordered_events = list(reversed(events))
+            if not ordered_events:
+                panel_controls.append(ft.Text("-", color=ft.Colors.OUTLINE))
+                continue
+            for event in ordered_events:
+                key_text = event.key_value.hex() if isinstance(event.key_value, bytes) else str(event.key_value)
+                label = f"{event.key_type}#{event.key_number} ({event.created_at_step})"
+                panel_controls.append(
+                    build_key_field(
+                        page,
+                        visible,
+                        label,
+                        key_text,
+                        get_key_tooltip_text(event),
+                    )
+                )
+
+    return ft.Container(
+        content=ft.Column(
+            panel_controls,
+            spacing=2,
+            tight=False,
+            horizontal_alignment=ft.CrossAxisAlignment.START,
+            scroll=ft.ScrollMode.AUTO,
+        ),
+        width=SIDE_PANEL_WIDTH,
+        expand=True,
+        padding=8,
+        border_radius=8,
     )
 
 
@@ -215,6 +261,11 @@ def build_visual(
 
     alice_panel = _build_party_panel(page, session.alice, "Alice", perspective, alice_input, on_send_alice)
     bob_panel = _build_party_panel(page, session.bob, "Bob", perspective, bob_input, on_send_bob)
+    
+    show_key_history = perspective.lower() != "attacker"
+    alice_history = _build_used_keys_history_panel(page, session.alice, "Alice", perspective) if show_key_history else None
+    bob_history = _build_used_keys_history_panel(page, session.bob, "Bob", perspective) if show_key_history else None
+    
     timeline = build_timeline(
         session,
         perspective,
@@ -225,17 +276,30 @@ def build_visual(
         on_show_receive_visualization=on_show_receive_visualization,
     )
 
+    timeline_container = ft.Container(
+        content=timeline,
+        height=timeline_height,
+        padding=10,
+        clip_behavior=ft.ClipBehavior.HARD_EDGE,
+    )
+
+    alice_controls: list[ft.Control] = [alice_panel]
+    bob_controls: list[ft.Control] = [bob_panel]
+    if show_key_history and alice_history is not None and bob_history is not None:
+        alice_controls.extend([ft.Divider(height=10), alice_history])
+        bob_controls.extend([ft.Divider(height=10), bob_history])
+
     return ft.Row(
         [
             ft.Container(
-                ft.Column([alice_panel], spacing=10, tight=False),
+                ft.Column(alice_controls, spacing=10, tight=False),
                 width=SIDE_PANEL_WIDTH,
                 height=timeline_height,
                 padding=10,
             ),
-            ft.Container(ft.Container(content=timeline, height=timeline_height, padding=10), expand=True, padding=10),
+            ft.Container(timeline_container, expand=True, padding=10),
             ft.Container(
-                ft.Column([bob_panel], spacing=10, tight=False),
+                ft.Column(bob_controls, spacing=10, tight=False),
                 width=SIDE_PANEL_WIDTH,
                 height=timeline_height,
                 padding=10,

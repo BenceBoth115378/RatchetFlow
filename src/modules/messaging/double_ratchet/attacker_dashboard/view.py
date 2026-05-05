@@ -1078,7 +1078,7 @@ def build_attacker_dashboard(
                     [item for item in owner_items if item.get("kind") in {"dh_private", "rk"}],
                     key=_key_sort,
                 )
-                ck_send = sorted(
+                ck_s = sorted(
                     [
                         item
                         for item in owner_items
@@ -1086,7 +1086,7 @@ def build_attacker_dashboard(
                     ],
                     key=_key_sort,
                 )
-                ck_recv = sorted(
+                ck_r = sorted(
                     [
                         item
                         for item in owner_items
@@ -1095,7 +1095,7 @@ def build_attacker_dashboard(
                     key=_key_sort,
                 )
 
-                for row_items in (dh_and_rk, ck_send, ck_recv):
+                for row_items in (dh_and_rk, ck_s, ck_r):
                     if not row_items:
                         continue
                     key_selector_controls.append(

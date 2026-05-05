@@ -124,6 +124,7 @@ class KeyHistory:
         self.dh_events.append(event)
 
 
+
 class LimitedSkippedKeys(dict[tuple[str, int], bytes]):
     def __init__(self, *args, max_items: int = 2000, **kwargs):
         self.max_items = max_items
@@ -487,6 +488,7 @@ class SpqrRatchetState:
     MKSKIPPED: dict[int, dict[int, bytes]] = field(default_factory=dict)
     direction: Direction = "A2B"
     scka_state: BraidProtocolState | None = None
+    key_history: KeyHistory = field(default_factory=KeyHistory)
 
 
 @dataclass
