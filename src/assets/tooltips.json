@@ -90,9 +90,24 @@
     "step_viz_shared_secret": "The shared secret derived from a Diffie-Hellman computation. This value is used as input (along with the previous root key) to the KDF_RK function to derive new root and chain keys for the next epoch.",
     "step_viz_receive_set_nr_zero": "The receiving message counter (Nr) is reset to 0, marking the start of the new receiving chain in this epoch. Every subsequent incoming message will be counted from index 0 within this new chain.",
     "step_viz_receive_kdf_rk_2": "The second KDF_RK call in this DH ratchet step. A Diffie-Hellman computation is performed using the same header DH public key and the receiver's freshly generated private DH key. The resulting shared secret, combined with the Root Key produced by KDF_RK #1, yields a new Root Key and the Sending Chain Key (CKs) for future outgoing messages.",
-    "used_keys_history_notice": "Used keys history is shown only for visualization and educational purposes. In a real application, each key is deleted immediately after use."
+    "used_keys_history_notice": "Used keys history is shown only for visualization and educational purposes. In a real application, each key is deleted immediately after use.",
+    "message": "Tooltips and explanations shown for message timeline entries (ciphertext/plaintext and related details)."
   },
   "x3dh": {
+    "ad_match": "Whether the recomputed associated data (AD) matches the received AD from the peer.",
+    "ad_preview": "Preview of the associated data (AD) computed from identity public keys and bound to the initial message.",
+    "shared_secret_match": "Whether the shared secret recomputed by the responder matches the initiator's derived value.",
+    "shared_secret_preview": "Preview of the derived shared secret after X3DH DH computations and KDF.",
+    "decrypted_text": "Plaintext result after decrypting the initial X3DH payload (if decryption succeeded).",
+    "decryption_ok": "Indicates whether the AEAD decryption of the initial X3DH payload succeeded.",
+    "dh": "Diffie-Hellman term or value used in the X3DH computations (generic DH output).",
+    "dh_count": "Count of Diffie-Hellman computations performed in this X3DH run.",
+    "ek_a": "Initiator ephemeral key (EK) public value used in the initial message header.",
+    "ik_a": "Initiator identity key (IK) public value used as a long-term identifier in X3DH.",
+    "spk_b": "Responder's Signed Prekey (SPK) public value referenced by the initiator.",
+    "opk_id": "Identifier of a one-time prekey (OPK) selected for this session, if present.",
+    "pn": "Previous sending chain length value included in headers (protocol-specific PN field).",
+    "n": "Message index (N) within the current sending chain, as published in the header.",
     "progressive_flow": "X3DH is shown in three educational phases. Complete each phase in sequence to unlock the next one and observe what data is produced.",
     "timeline": "Chronological log of X3DH actions and outcomes. Recent events appear at the bottom.",
     "event": "A protocol event emitted by an action in the simulation. Use this log to track state transitions.",
@@ -174,7 +189,24 @@
     "dr_bootstrap_set_dhs": "Bob initialization assignment where DHs is set from Bob's SPK_B key pair to match the receive-side runtime state.",
     "dr_bootstrap_set_rk": "Bob initialization assignment where RK is set directly from SK after successful X3DH shared-secret derivation.",
     "dr_bootstrap_ready": "Bootstrap completion marker: Bob now has the minimum Double Ratchet receive-state values and can process incoming ratcheted messages.",
-    "dr_bootstrap_summary": "Summary of key values persisted at the end of bootstrap. Use this panel to compare with the receive-step initial state."
+    "dr_bootstrap_summary": "Summary of key values persisted at the end of bootstrap. Use this panel to compare with the receive-step initial state.",
+    "step_viz_x3dh_header_input": "Input fields extracted from an X3DH header when merging X3DH data into a Double Ratchet header.",
+    "step_viz_x3dh_header_concat": "Concatenated X3DH header bytes used for building the combined header representation.",
+    "step_viz_x3dh_header_output": "Final X3DH header preview shown when the X3DH header is merged into the Double Ratchet header view.",
+    "x3dh_ik_a_public": "Alice identity key (IK_A) public value shown in the message timeline X3DH header preview.",
+    "x3dh_ek_a_public": "Alice ephemeral key (EK_A) public value shown in the message timeline X3DH header preview.",
+    "x3dh_bob_spk_public": "Bob's signed prekey public value presented in the X3DH header preview.",
+    "x3dh_bob_opk_id": "Bob's one-time prekey identifier shown in the X3DH header preview.",
+    "step_viz_header_split_complete": "Full incoming header that contains both the Double Ratchet header and embedded X3DH metadata.",
+    "step_viz_header_split_fn": "The process of separating X3DH metadata from the base Double Ratchet header.",
+    "step_viz_header_split_base": "Base Double Ratchet header component (dh, pn, n) after X3DH metadata is extracted.",
+    "step_viz_header_split_x3dh": "X3DH initialization header component extracted from the message header.",
+    "step_viz_bootstrap_party_status": "Status indicating whether this party has been initialized with X3DH-derived keys.",
+    "step_viz_bootstrap_party_initialized": "This party already has X3DH-derived Double Ratchet state and does not need initialization.",
+    "step_viz_bootstrap_party_not_initialized": "This party needs to initialize cryptographic state from the received X3DH header.",
+    "step_viz_bootstrap_x3dh_header": "The X3DH header used to bootstrap or verify the party's Double Ratchet state.",
+    "step_viz_bootstrap_fn": "X3DH bootstrap process: use the X3DH-derived data to initialize or verify Double Ratchet state.",
+    "step_viz_bootstrap_result": "Outcome of the X3DH bootstrap check showing whether initialization was successful."
   },
   "spqr": {
     "spqr_step_keygen_fn": "Runs the key-generation/encapsulation primitive used in the current SPQR step.",
@@ -228,7 +260,10 @@
     "spqr_step_kdf_scka_ck": "Advances chain key and derives per-message key (mk) for SPQR payload encryption/decryption.",
     "spqr_step_key_evolution": "Cryptographic key evolution step connecting SCKA output and ratchet key updates.",
     "spqr_step_rk_change": "Indicates whether RK derivation is required because root key changed in this transition.",
-    "spqr_step_visualization_dialog": "Interactive SPQR step-by-step visualization dialog for the selected action."
+    "spqr_step_visualization_dialog": "Interactive SPQR step-by-step visualization dialog for the selected action.",
+    "CK_send": "Sending chain key used by SPQR to derive one-time message keys for outgoing payloads.",
+    "CK_recv": "Receiving chain key used by SPQR to derive one-time message keys for incoming payloads.",
+    "Used keys history": "Used keys history is shown only for visualization; real implementations delete keys after use."
   },
   "pqxdh": {
     "x3dh_step_key_ik_pub": "Long-term EC identity public key used for authentication context in PQXDH and for AD construction.",
@@ -251,6 +286,7 @@
     "pqxdh_step_key_pqspk_pub": "Bob or Alice PQ signed prekey public value (last-resort PQ prekey) used for PQXDH KEM path.",
     "pqxdh_step_key_pqspk_priv": "Private value of PQ signed prekey, used only locally for decapsulation and never transmitted.",
     "pqxdh_step_key_pqspk_sig": "Signature over PQSPK public value, created with IK_priv and verified by peers.",
+    "PQSPK_sig": "Presence/status of a PQSPK signature in the bundle (present or missing).",
     "pqxdh_step_key_pqopk_pub": "PQ one-time prekey public value intended for one-time consumption by initiators.",
     "pqxdh_step_key_pqopk_priv": "PQ one-time prekey private value stored locally and consumed by the recipient side.",
     "pqxdh_step_key_pqpkb_pub": "Selected Bob PQ prekey public value used by Alice for PQKEM encapsulation.",
@@ -272,6 +308,20 @@
     "pqxdh_step_state_pqopk_count_local": "Number of PQ one-time prekeys currently stored in local state.",
     "pqxdh_step_state_pqopk_count_server": "Number of PQ one-time prekeys currently available on server for this party.",
     "pqxdh_step_state_pq_is_last_resort": "Indicates whether selected PQ key came from last-resort PQSPK instead of PQ one-time prekey set."
+    ,
+    "local_pqopk_count": "Number of locally stored PQ one-time prekeys available for one-time use.",
+    "alice_server_pqopk_count": "Number of PQ one-time prekeys for Alice available on the server.",
+    "bob_pq_bundle_status": "Status of Bob's PQ-enabled bundle response (with PQOPK or with PQSPK).",
+    "bob_server_pqopk_count": "Number of PQ one-time prekeys for Bob available on the server.",
+    "phase2_bob_pq_bundle_status": "Result of Alice requesting Bob's bundle specifically for PQXDH: indicates PQOPK vs PQSPK.",
+    "phase2_pq_cipher_preview": "Preview of the PQKEM ciphertext (truncated) returned during phase 2 PQ operations.",
+    "phase2_pq_key_used": "Indicates which PQ prekey type was used in phase 2 (PQOPK or PQSPK).",
+    "pq_cipher_preview": "Preview of the PQKEM ciphertext used for PQKEM encapsulation in this session.",
+    "pq_key_used": "Indicates which PQ prekey type was used by the initiator for PQ encapsulation.",
+    "pq_secret_included": "Whether a PQ shared-secret component was included in the derived SK for this session.",
+    "used_pq_prekey_type": "Label describing whether a PQOPK or PQSPK was consumed for this run.",
+    "used_keys_history": "Used keys history is shown only for visualization and educational purposes. In a real application, keys are deleted after use.",
+    "shared_secret_preview": "Preview of the full shared secret computed by combining EC DH outputs and PQKEM SS."
   }
 }
 

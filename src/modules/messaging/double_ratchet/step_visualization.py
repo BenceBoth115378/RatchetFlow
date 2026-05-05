@@ -1271,7 +1271,7 @@ def show_receiving_step_visualization_dialog(
                 combined_header_preview,
                 width=460,
                 full_value=combined_header_full,
-                tooltip="Full incoming header with X3DH metadata embedded",
+                tooltip=tooltips.get("step_viz_header_split_complete", ""),
             ),
             ft.Text("↓", size=24),
             flow_node(
@@ -1280,7 +1280,7 @@ def show_receiving_step_visualization_dialog(
                 width=200,
                 height=70,
                 circle=True,
-                tooltip="Separate X3DH header from base header",
+                tooltip=tooltips.get("step_viz_header_split_fn", ""),
             ),
             ft.Text("↓", size=24),
             ft.Row(
@@ -1294,14 +1294,14 @@ def show_receiving_step_visualization_dialog(
                             "pn": step_data.header.pn,
                             "n": step_data.header.n + 1,
                         },
-                        tooltip="Base Double Ratchet header",
+                        tooltip=tooltips.get("step_viz_header_split_base", ""),
                     ),
                     flow_node(
                         "X3DH header",
                         _x3dh_header_preview(step_data.x3dh_header),
                         width=420,
                         full_value=step_data.x3dh_header,
-                        tooltip="X3DH initialization header data",
+                        tooltip=tooltips.get("step_viz_header_split_x3dh", ""),
                         bgcolor=ft.Colors.SECONDARY_CONTAINER,
                         text_color=ft.Colors.ON_SECONDARY_CONTAINER,
                     ),
@@ -1329,10 +1329,11 @@ def show_receiving_step_visualization_dialog(
                 "Party status",
                 "Party initialized" if party_initialized else "Party not yet initialized",
                 width=280,
-                tooltip=(
-                    "This party already has X3DH-derived Double Ratchet state"
+                tooltip=tooltips.get(
+                    "step_viz_bootstrap_party_initialized"
                     if party_initialized
-                    else "This party needs to initialize cryptographic state from X3DH"
+                    else "step_viz_bootstrap_party_not_initialized",
+                    ""
                 ),
                 bgcolor=ft.Colors.SECONDARY_CONTAINER if party_initialized else ft.Colors.ERROR_CONTAINER,
                 text_color=ft.Colors.ON_SECONDARY_CONTAINER if party_initialized else ft.Colors.ON_ERROR_CONTAINER,
@@ -1346,7 +1347,7 @@ def show_receiving_step_visualization_dialog(
                     _x3dh_header_preview(step_data.x3dh_header),
                     width=320,
                     full_value=step_data.x3dh_header,
-                    tooltip="The X3DH header used to bootstrap or verify the party state",
+                    tooltip=tooltips.get("step_viz_bootstrap_x3dh_header", ""),
                 ),
                 ft.Text("↓", size=24),
                 flow_node(
@@ -1355,7 +1356,7 @@ def show_receiving_step_visualization_dialog(
                     width=340,
                     height=80,
                     circle=True,
-                    tooltip="Use the X3DH-derived data to initialize or verify Double Ratchet state",
+                    tooltip=tooltips.get("step_viz_bootstrap_fn", ""),
                 ),
                 ft.Column(
                     controls=[
@@ -1370,7 +1371,7 @@ def show_receiving_step_visualization_dialog(
                     "Result",
                     "Party was initialized during this receive",
                     width=360,
-                    tooltip="Outcome of the X3DH bootstrap check",
+                    tooltip=tooltips.get("step_viz_bootstrap_result", ""),
                 ),
             ])
         bootstrap_init_data_flow = ft.Column(
