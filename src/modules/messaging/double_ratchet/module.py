@@ -1,6 +1,6 @@
 import flet as ft
 from dataclasses import asdict
-from typing import Any
+from typing import Any, Callable
 
 from components.data_classes import (
     DHKeyPair,
@@ -200,6 +200,7 @@ def _serialize_message(message: MessageState) -> dict:
         "cipher": _encode_bytes(message.cipher),
         "decrypted_by_bob": _encode_bytes(message.decrypted_by_bob),
         "decrypted_by_alice": _encode_bytes(message.decrypted_by_alice),
+        "x3dh_header": message.x3dh_header,
         "plaintext": _encode_bytes(message.plaintext),
         "seq_id": message.seq_id,
     }
@@ -227,6 +228,7 @@ def _deserialize_message(data: dict) -> MessageState:
         decrypted_by_bob=_decode_bytes(data.get("decrypted_by_bob", "")),
         decrypted_by_alice=_decode_bytes(data.get("decrypted_by_alice", "")),
         header=header,
+        x3dh_header=data.get("x3dh_header") if isinstance(data.get("x3dh_header"), dict) else None,
         plaintext=plaintext,
         seq_id=data.get("seq_id", 0),
     )
@@ -247,6 +249,7 @@ class DoubleRatchetModule(MessagingBaseModule):
         self._x3dh_shared_secret: bytes | None = None
         self._x3dh_state_data: dict[str, Any] | None = None
         self._x3dh_bob_initialized: bool = False
+        self._x3dh_alice_received_bob_reply: bool = False
         self._pending_show_alice_x3dh_bootstrap: bool = True
         self._last_bob_bootstrap_info: dict[str, Any] | None = None
         self._reset_session_with_initializer("alice")
@@ -281,6 +284,7 @@ class DoubleRatchetModule(MessagingBaseModule):
             "x3dh_shared_secret": _encode_bytes(self._x3dh_shared_secret),
             "x3dh_state_data": self._x3dh_state_data,
             "x3dh_bob_initialized": self._x3dh_bob_initialized,
+            "x3dh_alice_received_bob_reply": self._x3dh_alice_received_bob_reply,
             "pending_show_alice_x3dh_bootstrap": self._pending_show_alice_x3dh_bootstrap,
             "attacker_compromised_secrets": _encode_nested(self._attacker_compromised_secrets),
         }
@@ -353,6 +357,7 @@ class DoubleRatchetModule(MessagingBaseModule):
             self._x3dh_shared_secret = None
         self._x3dh_state_data = data.get("x3dh_state_data") if isinstance(data.get("x3dh_state_data"), dict) else None
         self._x3dh_bob_initialized = bool(data.get("x3dh_bob_initialized", False))
+        self._x3dh_alice_received_bob_reply = data.get("x3dh_alice_received_bob_reply", False)
         self._pending_show_alice_x3dh_bootstrap = bool(data.get("pending_show_alice_x3dh_bootstrap", True))
         loaded_compromised = _decode_nested(data.get("attacker_compromised_secrets", {}))
         if isinstance(loaded_compromised, dict):
@@ -455,6 +460,7 @@ class DoubleRatchetModule(MessagingBaseModule):
         self._x3dh_shared_secret = shared_secret
         self._x3dh_state_data = asdict(x3dh_state)
         self._x3dh_bob_initialized = False
+        self._x3dh_alice_received_bob_reply = False
         self._pending_show_alice_x3dh_bootstrap = True
         self._last_bob_bootstrap_info = None
         initialize_key_history(self.session)
@@ -511,11 +517,15 @@ class DoubleRatchetModule(MessagingBaseModule):
         if pending is None:
             return None
 
+        x3dh_header_for_snapshot = pending.get("x3dh_header")
+        was_x3dh_bootstrapped = False
+        
         if recipient_name == "Bob" and not self._x3dh_bob_initialized:
             x3dh_header = pending.get("x3dh_header")
             if not isinstance(x3dh_header, dict):
                 raise ValueError("Bob cannot receive the first message because X3DH header is missing.")
             self._complete_bob_x3dh_bootstrap_from_header(x3dh_header)
+            was_x3dh_bootstrapped = True
 
         receiver_state = self._get_party(recipient_name)
         before_snapshot = self._snapshot_party_state(receiver_state)
@@ -549,10 +559,13 @@ class DoubleRatchetModule(MessagingBaseModule):
                 decrypted_by_bob=decrypted if recipient_name == "Bob" else b"",
                 decrypted_by_alice=decrypted if recipient_name == "Alice" else b"",
                 header=header,
+                x3dh_header=pending.get("x3dh_header") if isinstance(pending.get("x3dh_header"), dict) else None,
                 plaintext=pending.get("plaintext", b"") or decrypted,
                 seq_id=pending_id,
             )
         )
+        if pending["sender"] == "Bob" and recipient_name == "Alice":
+            self._x3dh_alice_received_bob_reply = True
         self.pending_messages = [item for item in self.pending_messages if item["id"] != pending_id]
 
         after_snapshot = self._snapshot_party_state(receiver_state)
@@ -575,6 +588,8 @@ class DoubleRatchetModule(MessagingBaseModule):
             ckr_before_kdf_ck=receive_trace.get("ckr_before_kdf_ck"),
             before=before_snapshot,
             after=after_snapshot,
+            x3dh_header=x3dh_header_for_snapshot if isinstance(x3dh_header_for_snapshot, dict) else None,
+            was_x3dh_bootstrapped=was_x3dh_bootstrapped,
         )
 
         # Track key generation from this receive step.
@@ -613,11 +628,11 @@ class DoubleRatchetModule(MessagingBaseModule):
 
         associated_data = self._session_ad
         plaintext_bytes = text_to_send.encode("utf-8")
-        is_first_alice_message = sender_key == "alice" and not self.session.message_log and not self.pending_messages
-        include_x3dh_header = sender_key == "alice" and not self._x3dh_bob_initialized and isinstance(self._x3dh_initial_header, dict)
-        if is_first_alice_message:
-            ad_prefix = b"X3DH_AD:" + self._session_ad.hex().encode("utf-8") + b"\n\n"
-            plaintext_bytes = ad_prefix + plaintext_bytes
+        include_x3dh_header = (
+            sender_key == "alice"
+            and not self._x3dh_alice_received_bob_reply
+            and isinstance(self._x3dh_initial_header, dict)
+        )
 
         before_snapshot = self._snapshot_party_state(sender_state)
 
@@ -643,6 +658,7 @@ class DoubleRatchetModule(MessagingBaseModule):
             receiver=receiver_name,
             plaintext=plaintext_bytes,
             header=header,
+            x3dh_header=self._x3dh_initial_header if include_x3dh_header else None,
             cipher=cipher,
             mk=mk,
             pending_id=pending_id,
@@ -754,8 +770,8 @@ class DoubleRatchetModule(MessagingBaseModule):
         ) -> None:
             show_sending_step_visualization_dialog(page, step_data, on_close=on_close)
 
-        def show_receive_step_visualization(step_data: ReceiveStepVisualizationSnapshot) -> None:
-            show_receiving_step_visualization_dialog(page, step_data)
+        def show_receive_step_visualization(step_data: ReceiveStepVisualizationSnapshot, on_show_x3dh_bootstrap: Callable[[], None] | None = None) -> None:
+            show_receiving_step_visualization_dialog(page, step_data, on_show_x3dh_bootstrap=on_show_x3dh_bootstrap)
 
         def show_alice_x3dh_bootstrap_visualization() -> None:
             alice_state = self._get_party("alice")
@@ -809,15 +825,13 @@ class DoubleRatchetModule(MessagingBaseModule):
             receive_snapshot = self._receive_snapshots.get(step_data.pending_id)
             if receive_snapshot is None:
                 return
-            bob_bootstrap = self._last_bob_bootstrap_info
-            if receive_step_visualization_checkbox.value and isinstance(bob_bootstrap, dict) and receive_snapshot.receiver == "Bob" and isinstance(bob_bootstrap.get("x3dh_header"), dict):
-                show_bob_x3dh_bootstrap_visualization(
-                    bob_bootstrap["x3dh_header"],
-                    on_close=lambda: show_receive_step_visualization(receive_snapshot),
-                )
-                self._last_bob_bootstrap_info = None
-                return
-            show_receive_step_visualization(receive_snapshot)
+            
+            # Create callback for showing X3DH bootstrap if button is clicked
+            def on_show_x3dh_bootstrap() -> None:
+                if receive_snapshot.x3dh_header is not None and receive_snapshot.was_x3dh_bootstrapped:
+                    show_bob_x3dh_bootstrap_visualization(receive_snapshot.x3dh_header)
+            
+            show_receive_step_visualization(receive_snapshot, on_show_x3dh_bootstrap=on_show_x3dh_bootstrap)
 
         def _is_attacker_perspective() -> bool:
             return app_state.perspective == "attacker"
@@ -883,9 +897,11 @@ class DoubleRatchetModule(MessagingBaseModule):
                 on_show_send_visualization=lambda sid: show_step_visualization(
                     self._send_snapshots[sid]
                 ) if sid in self._send_snapshots else None,
-                on_show_receive_visualization=lambda sid: show_receive_step_visualization(
-                    self._receive_snapshots[sid]
-                ) if sid in self._receive_snapshots else None,
+                on_show_receive_visualization=lambda sid: (
+                    lambda snapshot: (
+                        lambda on_show_x3dh: show_receive_step_visualization(snapshot, on_show_x3dh_bootstrap=on_show_x3dh)
+                    )(lambda: show_bob_x3dh_bootstrap_visualization(snapshot.x3dh_header) if snapshot.x3dh_header and snapshot.was_x3dh_bootstrapped else None)
+                )(self._receive_snapshots[sid]) if sid in self._receive_snapshots else None,
                 on_show_alice_x3dh_bootstrap=show_alice_x3dh_bootstrap_visualization,
                 on_show_bob_x3dh_bootstrap=lambda msg: show_bob_x3dh_bootstrap_visualization(
                     msg.header._asdict() if hasattr(msg, "header") and hasattr(msg.header, "_asdict") else {},
@@ -949,25 +965,17 @@ class DoubleRatchetModule(MessagingBaseModule):
                 _auto_show_receive_visualization_after_send(step_data)
 
         def on_receive_pending(recipient: str, pending_id: int) -> None:
-            pending = next((item for item in self.pending_messages if item.get("id") == pending_id), None)
-            will_show_bob_bootstrap = receive_step_visualization_checkbox.value and recipient.lower() == "bob" and not self._x3dh_bob_initialized and isinstance(pending, dict) and isinstance(pending.get("x3dh_header"), dict)
-            x3dh_header_for_bob = pending.get("x3dh_header") if isinstance(pending, dict) else None
-
             step_data = self.receive_message(recipient, pending_id)
             refresh_view()
             page.update()
-            if will_show_bob_bootstrap and isinstance(x3dh_header_for_bob, dict):
-                if receive_step_visualization_checkbox.value and step_data is not None:
-                    show_bob_x3dh_bootstrap_visualization(
-                        x3dh_header_for_bob,
-                        on_close=lambda: show_receive_step_visualization(step_data),
-                    )
-                else:
-                    show_bob_x3dh_bootstrap_visualization(x3dh_header_for_bob)
-                self._last_bob_bootstrap_info = None
-                return
+            
             if receive_step_visualization_checkbox.value and step_data is not None:
-                show_receive_step_visualization(step_data)
+                # Create callback for showing X3DH bootstrap if button is clicked
+                def on_show_x3dh_bootstrap() -> None:
+                    if step_data.x3dh_header is not None and step_data.was_x3dh_bootstrapped:
+                        show_bob_x3dh_bootstrap_visualization(step_data.x3dh_header)
+                
+                show_receive_step_visualization(step_data, on_show_x3dh_bootstrap=on_show_x3dh_bootstrap)
 
         def on_reset_module(e) -> None:
             self._reset_session_with_initializer("alice")
@@ -1021,6 +1029,4 @@ class DoubleRatchetModule(MessagingBaseModule):
             expand=True,
         )
 
-
-# Backward compatibility alias for existing imports.
 DoubleRatchetModule = DoubleRatchetModule

@@ -210,6 +210,54 @@ def build_timeline(
             wrap=True,
         )
 
+    def _build_x3dh_header_row(x3dh_header: dict | None) -> ft.Row | None:
+        if not isinstance(x3dh_header, dict):
+            return None
+
+        ik_a_public = x3dh_header.get("ik_a_public") if isinstance(x3dh_header.get("ik_a_public"), str) else ""
+        ek_a_public = x3dh_header.get("ek_a_public") if isinstance(x3dh_header.get("ek_a_public"), str) else ""
+        bob_spk_public = x3dh_header.get("bob_spk_public") if isinstance(x3dh_header.get("bob_spk_public"), str) else ""
+        bob_opk_id_raw = x3dh_header.get("bob_opk_id")
+        bob_opk_id = str(bob_opk_id_raw) if bob_opk_id_raw is not None else "None"
+
+        return ft.Row(
+            controls=[
+                ft.Text("x3dh:"),
+                build_tooltip_text(
+                    "ik_a",
+                    last_n_chars(ik_a_public, 12) if ik_a_public else "",
+                    tooltips.get("x3dh_ik_a_public", "Alice identity key from X3DH header"),
+                    full_value=ik_a_public or None,
+                    on_click=make_copy_handler(page, "X3DH IK_A", ik_a_public) if page is not None and ik_a_public else None,
+                ),
+                ft.Text("|"),
+                build_tooltip_text(
+                    "ek_a",
+                    last_n_chars(ek_a_public, 12) if ek_a_public else "",
+                    tooltips.get("x3dh_ek_a_public", "Alice ephemeral key from X3DH header"),
+                    full_value=ek_a_public or None,
+                    on_click=make_copy_handler(page, "X3DH EK_A", ek_a_public) if page is not None and ek_a_public else None,
+                ),
+                ft.Text("|"),
+                build_tooltip_text(
+                    "spk_b",
+                    last_n_chars(bob_spk_public, 12) if bob_spk_public else "",
+                    tooltips.get("x3dh_bob_spk_public", "Bob signed prekey from X3DH header"),
+                    full_value=bob_spk_public or None,
+                    on_click=make_copy_handler(page, "X3DH Bob SPK", bob_spk_public) if page is not None and bob_spk_public else None,
+                ),
+                ft.Text("|"),
+                build_tooltip_text(
+                    "opk_id",
+                    bob_opk_id,
+                    tooltips.get("x3dh_bob_opk_id", "Bob one-time prekey id from X3DH header"),
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.START,
+            spacing=8,
+            wrap=True,
+        )
+
     def _build_message_text(message_line: str, tooltip_message: str = "") -> ft.Control:
         can_copy = page is not None and message_line.strip() != "message:"
 
@@ -241,13 +289,7 @@ def build_timeline(
         )
     ]
 
-    if on_show_alice_x3dh_bootstrap is not None and perspective_key in {"global", "alice"}:
-        controls.append(
-            ft.TextButton(
-                "Show Alice X3DH initialization",
-                on_click=lambda e: on_show_alice_x3dh_bootstrap(),
-            )
-        )
+    alice_bootstrap_needed = on_show_alice_x3dh_bootstrap is not None and perspective_key in {"global", "alice"}
     col = ft.Column(
         controls,
         scroll=ft.ScrollMode.ALWAYS,
@@ -281,13 +323,19 @@ def build_timeline(
         pn,
         n,
         message_line: str,
+        x3dh_header: dict | None = None,
         border: ft.Border | None = None,
         bgcolor: str | None = None,
         message_tooltip: str = "",
     ) -> ft.Container:
+        header_controls: list[ft.Control] = [row, _build_header_row(dh, pn, n)]
+        x3dh_header_row = _build_x3dh_header_row(x3dh_header)
+        if x3dh_header_row is not None:
+            header_controls.append(x3dh_header_row)
+        header_controls.append(_build_message_text(message_line, message_tooltip))
         return ft.Container(
             content=ft.Column(
-                controls=[row, _build_header_row(dh, pn, n), _build_message_text(message_line, message_tooltip)],
+                controls=header_controls,
                 spacing=2,
                 tight=True,
             ),
@@ -311,6 +359,7 @@ def build_timeline(
             attacker_results[(a["id"], a["state"])] = a
 
     bob_bootstrap_inserted = False
+    bob_bootstrap_msg = None
     for seq_id, kind, entry in sorted(combined, key=lambda x: x[0], reverse=True):
         i = seq_id
         border = None
@@ -369,15 +418,22 @@ def build_timeline(
 
             if (not bob_bootstrap_inserted and on_show_bob_x3dh_bootstrap is not None and receiver.lower() == "bob"
                 and perspective_key in {"global", "bob"}):
-                col.controls.append(
-                    ft.TextButton(
-                        "Show Bob X3DH initialization",
-                        on_click=lambda e, msg=msg: on_show_bob_x3dh_bootstrap(msg),
-                    )
-                )
+                bob_bootstrap_msg = msg
                 bob_bootstrap_inserted = True
             row = ft.Row(controls=row_controls, alignment=ft.MainAxisAlignment.START)
-            col.controls.append(_build_entry_container(row, dh, pn, n, message_line, border, bgcolor, message_tooltip))
+            col.controls.append(
+                _build_entry_container(
+                    row,
+                    dh,
+                    pn,
+                    n,
+                    message_line,
+                    x3dh_header=getattr(msg, "x3dh_header", None),
+                    border=border,
+                    bgcolor=bgcolor,
+                    message_tooltip=message_tooltip,
+                )
+            )
 
         else:  # pending
             pending = entry
@@ -408,7 +464,34 @@ def build_timeline(
                 row_controls.append(ft.Text("Pending"))
 
             row = ft.Row(controls=row_controls, alignment=ft.MainAxisAlignment.START)
-            col.controls.append(_build_entry_container(row, dh, pn, n, message_line, border, bgcolor))
+            col.controls.append(
+                _build_entry_container(
+                    row,
+                    dh,
+                    pn,
+                    n,
+                    message_line,
+                    x3dh_header=pending.get("x3dh_header") if isinstance(pending.get("x3dh_header"), dict) else None,
+                    border=border,
+                    bgcolor=bgcolor,
+                )
+            )
+
+    if alice_bootstrap_needed:
+        col.controls.append(
+            ft.TextButton(
+                "Show Alice X3DH initialization",
+                on_click=lambda e: on_show_alice_x3dh_bootstrap(),
+            )
+        )
+
+    if bob_bootstrap_msg is not None and on_show_bob_x3dh_bootstrap is not None and perspective_key in {"global", "bob"}:
+        col.controls.append(
+            ft.TextButton(
+                "Show Bob X3DH initialization",
+                on_click=lambda e, msg=bob_bootstrap_msg: on_show_bob_x3dh_bootstrap(msg),
+            )
+        )
 
     return col
 

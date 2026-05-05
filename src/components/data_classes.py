@@ -192,6 +192,7 @@ class MessageState:
     decrypted_by_bob: bytes = b""
     decrypted_by_alice: bytes = b""
     header: Header | None = None
+    x3dh_header: dict[str, Any] | None = None
     plaintext: bytes = b""
     seq_id: int = 0
 
@@ -221,6 +222,7 @@ class SendStepVisualizationSnapshot:
     before: PartyStateSnapshot
     after: PartyStateSnapshot
     initializer_switch_warning: str | None = None
+    x3dh_header: dict[str, Any] | None = None
 
 
 @dataclass
@@ -242,6 +244,8 @@ class ReceiveStepVisualizationSnapshot:
     ckr_before_kdf_ck: bytes | None
     before: PartyStateSnapshot
     after: PartyStateSnapshot
+    x3dh_header: dict[str, Any] | None = None
+    was_x3dh_bootstrapped: bool = False
 
 
 def _spqr_encode_bytes(value: bytes | None) -> str | None:
