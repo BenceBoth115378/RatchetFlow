@@ -4,7 +4,7 @@ from typing import Any, Callable
 
 import flet as ft
 
-from components.data_classes import SpqrHeader
+from components.data_classes import SpqrHeader, SpqrRatchetState
 from modules.base_step_visualization import (
     page_size as _shared_page_size,
     to_text as _shared_to_text,
@@ -2068,7 +2068,10 @@ def _build_send_message_pipeline_steps(step_data: dict[str, Any], tooltips: dict
         "n": header.n if header is not None else None,
     }
 
-    return [
+    steps: list[dict[str, Any]] = []
+
+    # Message key derivation step
+    steps.append(
         {
             "title": "Message key derivation",
             "control": ft.Column(
@@ -2105,7 +2108,10 @@ def _build_send_message_pipeline_steps(step_data: dict[str, Any], tooltips: dict
                 spacing=6,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-        },
+        }
+    )
+
+    steps.append(
         {
             "title": "Build SPQR header",
             "control": ft.Column(
@@ -2138,7 +2144,63 @@ def _build_send_message_pipeline_steps(step_data: dict[str, Any], tooltips: dict
                 spacing=6,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-        },
+        }
+    )
+
+    pqxdh_header = step_data.get("pqxdh_header") if isinstance(step_data.get("pqxdh_header"), dict) else None
+    if isinstance(pqxdh_header, dict):
+        pqxdh_preview = _pqxdh_header_preview(pqxdh_header)
+        combined_header_full = {
+            "header": header_payload,
+            "pqxdh_header": pqxdh_header,
+        }
+        combined_header_preview = f"{_header_preview(header)} | pqxdh: {pqxdh_preview}"
+        steps.append(
+            {
+                "title": "Add PQXDH header data",
+                "control": ft.Column(
+                    controls=[
+                        ft.Text("Add PQXDH header data", weight="bold"),
+                        ft.Row(
+                            controls=[
+                                _flow_node(
+                                    "PQXDH header",
+                                    pqxdh_preview,
+                                    width=420,
+                                    full_value=pqxdh_header,
+                                    tooltip=_tt("pqxdh_step_node_verify_pq"),
+                                ),
+                                _flow_node(
+                                    "Header",
+                                    _header_preview(header),
+                                    width=320,
+                                    full_value=header_payload,
+                                    tooltip=_tt("spqr_step_header"),
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            spacing=16,
+                            wrap=True,
+                        ),
+                        ft.Text("↓", size=24),
+                        _flow_node("CONCAT", circle=True, width=220, tooltip=_tt("pqxdh_step_node_verify_pq")),
+                        ft.Text("↓", size=24),
+                        _flow_node(
+                            "Header including PQXDH data",
+                            combined_header_preview,
+                            width=620,
+                            height=110,
+                            full_value=combined_header_full,
+                            tooltip=_tt("pqxdh_step_node_verify_pq"),
+                        ),
+                    ],
+                    spacing=6,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+            }
+        )
+
+    steps.append(
         {
             "title": "Encrypt message",
             "control": ft.Column(
@@ -2166,8 +2228,10 @@ def _build_send_message_pipeline_steps(step_data: dict[str, Any], tooltips: dict
                 spacing=6,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-        },
-    ]
+        }
+    )
+
+    return steps
 
 
 def _build_receive_message_pipeline_steps(step_data: dict[str, Any], tooltips: dict[str, str]) -> list[dict[str, Any]]:
@@ -2333,6 +2397,617 @@ def _build_after_step(
     }
 
 
+def show_alice_pqxdh_bootstrap_visualization_dialog(
+    page: ft.Page,
+    pqxdh_state_data: dict[str, Any] | None,
+    rk_after_init: bytes | None,
+    cks_after_init: bytes | None,
+    alice_scka_state: Any = None,
+    session_ad: bytes | None = None,
+    on_close: Callable[[], None] | None = None,
+) -> None:
+    tooltips = {
+        **get_tooltip_messages("pqxdh"),
+        **get_tooltip_messages("spqr"),
+    }
+
+    derived = {}
+    last_bundle = {}
+    real_pqxdh_header = {}
+    if isinstance(pqxdh_state_data, dict):
+        initial_message = pqxdh_state_data.get("initial_message", {})
+        if isinstance(initial_message, dict) and isinstance(initial_message.get("header"), dict):
+            real_pqxdh_header = initial_message["header"]
+        else:
+            real_pqxdh_header = pqxdh_state_data.get("initial_header") if isinstance(pqxdh_state_data.get("initial_header"), dict) else {}
+        derived = pqxdh_state_data.get("alice_derived") if isinstance(pqxdh_state_data.get("alice_derived"), dict) else {}
+        last_bundle = pqxdh_state_data.get("last_bundle_for_alice") if isinstance(pqxdh_state_data.get("last_bundle_for_alice"), dict) else {}
+        if not derived:
+            derived = pqxdh_state_data
+
+    shared_secret = derived.get("shared_secret_hex") if isinstance(derived.get("shared_secret_hex"), str) else derived.get("shared_secret")
+    associated_data = derived.get("associated_data_hex") if isinstance(derived.get("associated_data_hex"), str) else derived.get("associated_data")
+    header_preview = _pqxdh_header_preview(real_pqxdh_header)
+    alice_identity_public = None
+    if isinstance(pqxdh_state_data, dict):
+        alice_local = pqxdh_state_data.get("alice_local", {})
+        alice_identity = alice_local.get("identity_dh", {})
+        alice_identity_public = alice_identity.get("public", None)
+
+    opk_pub = last_bundle.get("opk_public") if last_bundle.get("opk_public") not in {None, "", "-"} else None
+    pq_opk_pub = last_bundle.get("pq_opk_public") if last_bundle.get("pq_opk_public") not in {None, "", "-"} else None
+    pq_prekey_source = last_bundle.get("pq_prekey_source", "pqspk")
+
+    bundle_controls = [
+        ft.Text("Bundle from server:", size=12, weight="bold"),
+        ft.Row(
+            controls=[
+                _flow_node("IK_B", _last_n_chars(last_bundle.get("identity_dh_public"), 8), width=180, full_value=last_bundle.get("identity_dh_public"), tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
+                _flow_node("SPK_B", _last_n_chars(last_bundle.get("signed_prekey_public"), 8), width=180, full_value=last_bundle.get("signed_prekey_public"), tooltip=tooltips.get("x3dh_step_key_spk_pub", "")),
+                _flow_node("SPK_B_sig", _last_n_chars(last_bundle.get("signed_prekey_signature"), 8), width=180, full_value=last_bundle.get("signed_prekey_signature"), tooltip=tooltips.get("x3dh_step_key_spk_sig", "")),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=10,
+            wrap=True,
+        ),
+    ]
+    
+    if opk_pub is not None:
+        bundle_controls.append(
+            ft.Row(
+                controls=[
+                    _flow_node("OPK_B", _last_n_chars(opk_pub), width=180, full_value=opk_pub, tooltip=tooltips.get("x3dh_step_key_opk_pub", "")),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=10,
+            )
+        )
+    
+    bundle_controls.extend([
+        ft.Row(
+            controls=[
+                _flow_node("PQSPK_B", _last_n_chars(last_bundle.get("pq_signed_prekey_public"), 8), width=180, full_value=last_bundle.get("pq_signed_prekey_public"), tooltip=tooltips.get("x3dh_step_key_pqspk_pub", "")),
+                _flow_node("PQSPK_B_sig", _last_n_chars(last_bundle.get("pq_signed_prekey_signature"), 8), width=180, full_value=last_bundle.get("pq_signed_prekey_signature"), tooltip=tooltips.get("x3dh_step_key_spk_sig", "")),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=10,
+            wrap=True,
+        ),
+    ])
+    
+    if pq_opk_pub is not None:
+        bundle_controls.append(
+            ft.Row(
+                controls=[
+                    _flow_node(f"PQ{pq_prekey_source.upper()}_B", _last_n_chars(pq_opk_pub), width=180, full_value=pq_opk_pub, tooltip=tooltips.get("x3dh_step_key_opk_pub", "")),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=10,
+            )
+        )
+
+    step1 = ft.Column(
+        controls=[
+            ft.Text("1) Alice requests Bob's bundle", weight="bold"),
+            *bundle_controls,
+        ],
+        spacing=8,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    step2 = ft.Column(
+        controls=[
+            ft.Text("2a) Alice verifies EC signature (SPK_B_sig)", weight="bold"),
+            ft.Row(
+                controls=[
+                    _var_node("IK_B", last_bundle.get("identity_dh_public"), "x3dh_step_key_ik_pub"),
+                    _var_node("SPK_B", last_bundle.get("signed_prekey_public"), "x3dh_step_key_spk_pub"),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=12,
+                wrap=True,
+            ),
+            ft.Text("↓", size=20),
+            _function_node("VERIFY_EC", "spqr_step_state_op", full_value="Verify EC signature"),
+            ft.Text("↓", size=20),
+            _flow_node("Verification result", "Valid signature",width=200, tooltip=_tt("spqr_step_state_op")),
+        ],
+        spacing=6,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    step3 = ft.Column(
+        controls=[
+            ft.Text("2b) Alice verifies PQ signature (PQSPK_B_sig)", weight="bold"),
+            ft.Row(
+                controls=[
+                    _var_node("IK_B", last_bundle.get("identity_dh_public"), "x3dh_step_key_ik_pub"),
+                    _var_node("PQSPK_B", last_bundle.get("pq_signed_prekey_public"), "x3dh_step_key_pqspk_pub"),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=12,
+                wrap=True,
+            ),
+            ft.Text("↓", size=20),
+            _function_node("VERIFY_PQ", "spqr_step_state_op", full_value="Verify PQ signature"),
+            ft.Text("↓", size=20),
+            _flow_node("Verification result", "Valid signature",width=200, tooltip=_tt("spqr_step_state_op")),
+        ],
+        spacing=6,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    pqpkb_pub = pq_opk_pub if pq_opk_pub else last_bundle.get("pq_signed_prekey_public")
+    pq_shared_secret = derived.get("pq_secret") if isinstance(derived.get("pq_secret"), str) else derived.get("pq_shared_secret")
+    step4 = ft.Column(
+        controls=[
+            ft.Text("3) Alice encapsulates PQ prekey material", weight="bold"),
+            _var_node("PQPKB", pqpkb_pub, "x3dh_step_key_pqspk_pub"),
+            ft.Text("↓", size=20),
+            _function_node("PQKEM.Encaps", "spqr_step_state_op", full_value="PQPKB -> encaps -> CT, SS"),
+            ft.Text("↓", size=20),
+            ft.Row(
+                controls=[
+                    _flow_node("CT", _last_n_chars(derived.get("kem_ciphertext"), 8), width=200, full_value=derived.get("kem_ciphertext"), tooltip=tooltips.get("pqxdh_step_key_ct", "")),
+                    _flow_node("SS (from PQKEM)", _last_n_chars(pq_shared_secret), width=220, full_value=pq_shared_secret, tooltip=tooltips.get("pqxdh_step_key_ss", "")),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=12,
+                wrap=True,
+            ),
+        ],
+        spacing=6,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    step5 = ft.Column(
+        controls=[
+            ft.Text("4) Alice derives shared secret SK", weight="bold"),
+            ft.Row(
+                controls=[
+                    _function_node("DH1", "spqr_step_state_op", full_value="DH(IKA_priv, SPK_B)"),
+                    _function_node("DH2", "spqr_step_state_op", full_value="DH(EKA_priv, IK_B)"),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=12,
+                wrap=True,
+            ),
+            ft.Row(
+                controls=[
+                    _function_node("DH3", "spqr_step_state_op", full_value="DH(EKA_priv, SPK_B)"),
+                    _function_node("DH4", "spqr_step_state_op", full_value="DH(EKA_priv, OPK_B)"),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=12,
+                wrap=True,
+            ),
+            _flow_node("SS (from PQKEM)", _last_n_chars(pq_shared_secret), width=240, full_value=pq_shared_secret, tooltip=tooltips.get("pqxdh_step_key_ss", "")),
+            ft.Text("↓", size=20),
+            _function_node("KDF_SK", "spqr_step_state_op", full_value="KDF_SK(DH1 || DH2 || DH3 || DH4 || SS)"),
+            ft.Text("↓", size=20),
+            _var_node("SK", shared_secret, "pqxdh_step_key_ss"),
+        ],
+        spacing=6,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    step6 = ft.Column(
+        controls=[
+            ft.Text("5) Alice computes associated data and builds PQXDH header prefix", weight="bold"),
+            ft.Row(
+                controls=[
+                    _flow_node("IK_A", _last_n_chars(alice_identity_public), width=220, full_value=alice_identity_public, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
+                    _flow_node("IK_B", _last_n_chars(last_bundle.get("identity_dh_public")), width=220, full_value=last_bundle.get("identity_dh_public"), tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=12,
+                wrap=True,
+            ),
+            ft.Text("↓", size=20),
+            _function_node("CALC_AD", "spqr_step_state_op", full_value="IK_A, IK_B -> CALC_AD"),
+            ft.Text("↓", size=20),
+            _var_node("AD", associated_data, "pqxdh_step_key_ad"),
+            ft.Divider(height=1),
+            _flow_node("PQXDH header prefix", header_preview, width=580, full_value=real_pqxdh_header, tooltip=tooltips.get("pqxdh_step_node_verify_pq", "")),
+        ],
+        spacing=6,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    ckr_value = None
+    if alice_scka_state is not None and hasattr(alice_scka_state, "kdfchains"):
+        try:
+            chains = alice_scka_state.kdfchains.get(alice_scka_state.epoch)
+            if chains and hasattr(chains, "receive"):
+                ckr_value = chains.receive.CK
+        except Exception:
+            pass
+
+    step7 = ft.Column(
+        controls=[
+            ft.Text("6) Initialize Alice SPQR session state", weight="bold"),
+            _var_node("SK", shared_secret, "pqxdh_step_key_ss"),
+            ft.Text("↓", size=20),
+            _function_node("RatchetInitAliceSCKA(SK)", "spqr_step_state_op", full_value="Initialize ratchet state"),
+            ft.Text("↓", size=20),
+            ft.Row(
+                controls=[
+                    _var_node("RK", rk_after_init, "spqr_step_rk"),
+                    _var_node("CKs", cks_after_init, "spqr_step_send_ck"),
+                    _var_node("CKr", ckr_value, "spqr_step_recv_ck"),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=12,
+                wrap=True,
+            ),
+            ft.Divider(height=1),
+            _flow_node("Direction", "A2B", width=200, tooltip=_tt("spqr_step_direction"), full_value="A2B"),
+        ],
+        spacing=6,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    steps = [
+        {"title": "Alice requests Bob bundle", "control": step1},
+        {"title": "Alice verifies EC signature", "control": step2},
+        {"title": "Alice verifies PQ signature", "control": step3},
+        {"title": "Alice encapsulates ephemeral KEM", "control": step4},
+        {"title": "Alice derives shared secret SK", "control": step5},
+        {"title": "Alice computes AD and header prefix", "control": step6},
+        {"title": "Alice initializes SPQR state", "control": step7},
+    ]
+    _normalize_step_titles(steps)
+    _show_step_dialog(page, "SPQR Alice bootstrap", steps, on_close=on_close)
+
+
+def show_bob_pqxdh_bootstrap_visualization_dialog(
+    page: ft.Page,
+    pqxdh_header: dict[str, Any] | None,
+    shared_secret: bytes | None,
+    session_ad: bytes | None,
+    bob_state: SpqrRatchetState | None,
+    bob_ik_public: str | None = None,
+    pq_shared_secret: bytes | None = None,
+    bob_pq_prekey_public: str | None = None,
+    on_close: Callable[[], None] | None = None,
+) -> None:
+    tooltips = {
+        **get_tooltip_messages("pqxdh"),
+        **get_tooltip_messages("spqr"),
+    }
+
+    header_preview = _pqxdh_header_preview(pqxdh_header)
+
+    ik_a_public = pqxdh_header.get("ik_a_public") if isinstance(pqxdh_header, dict) else None
+    kem_ciphertext = pqxdh_header.get("pq_ciphertext") if isinstance(pqxdh_header, dict) else None
+    if kem_ciphertext is None and isinstance(pqxdh_header, dict):
+        kem_ciphertext = pqxdh_header.get("kem_ciphertext")
+
+    rk_value = bob_state.RK if bob_state is not None else None
+    chains = bob_state.kdfchains.get(bob_state.epoch) if bob_state is not None else None
+    ckr_value = chains.receive.CK if chains is not None and chains.receive is not None else None
+    cks_value = chains.send.CK if chains is not None and chains.send is not None else None
+    rk_after_init = rk_value
+    cks_after_init = cks_value
+
+    step1 = ft.Column(
+        controls=[
+            ft.Text("1) Extract PQXDH header", weight="bold"),
+            _flow_node(
+                "Received PQXDH header",
+                header_preview,
+                width=560,
+                full_value=pqxdh_header,
+                tooltip=tooltips.get("pqxdh_step_node_verify_pq", ""),
+            ),
+            ft.Text("↓", size=24),
+            _function_node(
+                "Extract components",
+                "spqr_step_state_op",
+                full_value="Extract ik_a, ek_a, bob_spk, pq_id, CT"
+            ),
+        ],
+        spacing=6,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    # Step 2: Decapsulate KEM
+    step2 = ft.Column(
+        controls=[
+            ft.Text("2) Decapsulate KEM ciphertext", weight="bold"),
+            ft.Row(
+                controls=[
+                    _var_node("CT", kem_ciphertext, "pqxdh_step_key_ct"),
+                    _var_node("PQPKB", bob_pq_prekey_public, "x3dh_step_key_pqspk_pub"),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=12,
+                wrap=True,
+            ),
+            ft.Text("↓", size=24),
+            _function_node(
+                "PQKEM.Decaps",
+                "spqr_step_state_op",
+                full_value="CT + Bob_pq_privkey -> SS"
+            ),
+            ft.Text("↓", size=24),
+            _var_node(
+                "SS (PQ shared secret)",
+                pq_shared_secret,
+                "pqxdh_step_key_ss",
+            ),
+        ],
+        spacing=6,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    step3 = ft.Column(
+        controls=[
+            ft.Text("3) Calculate shared secret SK", weight="bold"),
+            ft.Row(
+                controls=[
+                    _flow_node("DH1", "DH(Bob_priv_spk, EK_A)", width=320, full_value="Bob_priv_spk + EK_A -> DH1", tooltip=tooltips.get("x3dh_step_node_dh", "")),
+                    _flow_node("DH2", "DH(Bob_priv_ik, EK_A)", width=320, full_value="Bob_priv_ik + EK_A -> DH2", tooltip=tooltips.get("x3dh_step_node_dh", "")),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=12,
+                wrap=True,
+            ),
+            ft.Row(
+                controls=[
+                    _flow_node("DH3", "DH(Bob_priv_spk, EK_A)", width=320, full_value="Bob_priv_spk + EK_A -> DH3", tooltip=tooltips.get("x3dh_step_node_dh", "")),
+                    _flow_node("DH4", "DH(Bob_priv_ik, EK_A)", width=320, full_value="Bob_priv_ik + EK_A -> DH4", tooltip=tooltips.get("x3dh_step_node_dh", "")),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=12,
+                wrap=True,
+            ),
+            _var_node(
+                "SS (from PQKEM)",
+                pq_shared_secret,
+                "pqxdh_step_key_ss",
+            ),
+            ft.Text("↓", size=24),
+            _function_node(
+                "KDF_SK",
+                "spqr_step_state_op",
+                full_value="KDF_SK(DH1 || DH2 || DH3 || DH4 || SS)"
+            ),
+            ft.Text("↓", size=24),
+            _var_node("SK", shared_secret, "pqxdh_step_key_ss"),
+        ],
+        spacing=6,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    # Step 4: Calculate AD
+    step4 = ft.Column(
+        controls=[
+            ft.Text("4) Calculate associated data AD", weight="bold"),
+            ft.Row(
+                controls=[
+                    _flow_node("IK_A", _last_n_chars(ik_a_public, 8), width=220, full_value=ik_a_public, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
+                    _flow_node("IK_B", _last_n_chars(bob_ik_public, 8), width=220, full_value=bob_ik_public, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=12,
+                wrap=True,
+            ),
+            ft.Text("↓", size=24),
+            _function_node("CALC_AD", "spqr_step_state_op", full_value="IK_A, IK_B -> CALC_AD"),
+            ft.Text("↓", size=24),
+            _var_node("AD", session_ad, "pqxdh_step_key_ad"),
+        ],
+        spacing=6,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    # Step 5: Initialize SCKA
+    step5 = ft.Column(
+        controls=[
+            ft.Text("5) Initialize Bob SCKA state", weight="bold"),
+            _var_node("SK", shared_secret, "pqxdh_step_key_ss"),
+            ft.Text("↓", size=20),
+            _function_node(
+                "RatchetInitBobSCKA",
+                "spqr_step_state_op",
+                full_value="RatchetInitBobSCKA(SK, AD)"
+            ),
+            ft.Text("↓", size=24),
+            ft.Row(
+                controls=[
+                    _var_node("RK", rk_after_init, "spqr_step_rk"),
+                    _var_node("CKs", cks_after_init, "spqr_step_send_ck"),
+                    _var_node("CKr", ckr_value, "spqr_step_recv_ck"),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=12,
+                wrap=True,
+            ),
+            ft.Divider(height=1),
+            _flow_node(
+                "Direction",
+                "B2A (Bob receives, Alice sends)",
+                width=280,
+                tooltip=tooltips.get("spqr_step_direction", ""),
+                full_value="B2A"
+            ),
+        ],
+        spacing=6,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    steps = [
+        {"title": "Extract PQXDH header", "control": step1},
+        {"title": "Decapsulate KEM ciphertext", "control": step2},
+        {"title": "Calculate shared secret SK", "control": step3},
+        {"title": "Calculate associated data AD", "control": step4},
+        {"title": "Initialize Bob SCKA state", "control": step5},
+    ]
+    _normalize_step_titles(steps)
+    _show_step_dialog(page, "SPQR Bob PQXDH bootstrap", steps, on_close=on_close)
+
+
+def _pqxdh_header_preview(pqxdh_header: dict[str, Any] | None) -> str:
+    if not isinstance(pqxdh_header, dict):
+        return "None"
+
+    ik_a = _last_n_chars(pqxdh_header.get("ik_a_public"), 8)
+    ek_a = _last_n_chars(pqxdh_header.get("ek_a_public"), 8)
+    bob_spk = _last_n_chars(pqxdh_header.get("bob_spk_public"), 8)
+    pq_prekey_id = pqxdh_header.get("bob_pq_prekey_id")
+    pq_prekey_text = str(pq_prekey_id) if pq_prekey_id is not None else "None"
+    return f"ik_a={ik_a}, ek_a={ek_a}, spk_b={bob_spk}, pq_id={pq_prekey_text}"
+
+
+def _build_pqxdh_header_split_step(
+    step_data: dict[str, Any],
+    tooltips: dict[str, str],
+) -> dict[str, Any] | None:
+    pqxdh_header = step_data.get("pqxdh_header") if isinstance(step_data.get("pqxdh_header"), dict) else None
+    header: SpqrHeader | None = step_data.get("header") if isinstance(step_data.get("header"), SpqrHeader) else None
+    if not isinstance(pqxdh_header, dict):
+        return None
+
+    header_msg = header.msg if header is not None else None
+    header_payload = {
+        "msg": header_msg.to_dict() if header_msg is not None else None,
+        "n": header.n if header is not None else None,
+    }
+    combined_header_full = {
+        "header": header_payload,
+        "pqxdh_header": pqxdh_header,
+    }
+    combined_header_preview = f"{_header_preview(header)} | pqxdh: {_pqxdh_header_preview(pqxdh_header)}"
+
+    return {
+        "title": "Header split (PQXDH metadata extraction)",
+        "control": ft.Column(
+            controls=[
+                ft.Text("Header split (PQXDH metadata extraction)", weight="bold"),
+                _flow_node(
+                    "Complete header",
+                    combined_header_preview,
+                    width=620,
+                    full_value=combined_header_full,
+                    tooltip=tooltips.get("pqxdh_step_node_verify_pq", ""),
+                ),
+                ft.Text("↓", size=24),
+                _flow_node(
+                    "SPLIT",
+                    "",
+                    width=200,
+                    height=70,
+                    circle=True,
+                    tooltip=tooltips.get("spqr_step_state_op", ""),
+                ),
+                ft.Text("↓", size=24),
+                ft.Row(
+                    controls=[
+                        _flow_node(
+                            "Message header",
+                            _header_preview(header),
+                            width=280,
+                            full_value=header_payload,
+                            tooltip=tooltips.get("spqr_step_header", ""),
+                        ),
+                        _flow_node(
+                            "PQXDH header",
+                            _pqxdh_header_preview(pqxdh_header),
+                            width=420,
+                            full_value=pqxdh_header,
+                            tooltip=tooltips.get("pqxdh_step_node_verify_pq", ""),
+                            bgcolor=ft.Colors.SECONDARY_CONTAINER,
+                            text_color=ft.Colors.ON_SECONDARY_CONTAINER,
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=16,
+                    wrap=True,
+                ),
+            ],
+            spacing=6,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+    }
+
+
+def _build_pqxdh_bootstrap_init_step(
+    step_data: dict[str, Any],
+    tooltips: dict[str, str],
+    on_show_pqxdh_bootstrap: Callable[[], None] | None = None,
+) -> dict[str, Any] | None:
+    pqxdh_header = step_data.get("pqxdh_header") if isinstance(step_data.get("pqxdh_header"), dict) else None
+    if not isinstance(pqxdh_header, dict):
+        return None
+
+    was_bootstrapped = bool(step_data.get("was_pqxdh_bootstrapped", False))
+    already_initialized = not was_bootstrapped
+
+    controls: list[ft.Control] = [
+        ft.Text("PQXDH initialization (party bootstrap)", weight="bold"),
+        _flow_node(
+            "Party status",
+            "Bob already initialized" if already_initialized else "Bob not initialized yet",
+            width=320,
+            tooltip=tooltips.get("spqr_step_state_op", ""),
+            full_value=already_initialized,
+            bgcolor=ft.Colors.SECONDARY_CONTAINER if already_initialized else ft.Colors.ERROR_CONTAINER,
+            text_color=ft.Colors.ON_SECONDARY_CONTAINER if already_initialized else ft.Colors.ON_ERROR_CONTAINER,
+        ),
+        ft.Divider(height=1),
+    ]
+
+    if was_bootstrapped:
+        controls.extend([
+            _flow_node(
+                "PQXDH header",
+                _pqxdh_header_preview(pqxdh_header),
+                width=420,
+                full_value=pqxdh_header,
+                tooltip=tooltips.get("pqxdh_step_node_verify_pq", ""),
+            ),
+            ft.Text("↓", size=24),
+            _flow_node(
+                "PQXDH Bootstrap",
+                "Initialize SPQR state from PQXDH",
+                width=360,
+                height=90,
+                circle=True,
+                tooltip=tooltips.get("spqr_step_state_op", ""),
+            ),
+        ])
+        if on_show_pqxdh_bootstrap is not None:
+            controls.append(
+                ft.Column(
+                    controls=[
+                        ft.Text("Click button to view detailed bootstrap steps:", size=12),
+                        ft.Button("Show Bob SPQR PQXDH bootstrap", on_click=lambda _: on_show_pqxdh_bootstrap()),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=10,
+                )
+            )
+        controls.extend([
+            ft.Text("↓", size=24),
+            _flow_node(
+                "Result",
+                "Bob was initialized during this receive",
+                width=380,
+                tooltip=tooltips.get("spqr_step_state_op", ""),
+            ),
+        ])
+
+    return {
+        "title": "PQXDH initialization (party bootstrap)",
+        "control": ft.Column(
+            controls=controls,
+            spacing=6,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+    }
+
+
 def _normalize_step_titles(steps: list[dict[str, Any]]) -> None:
     for index, step in enumerate(steps):
         numbered_title = f"{index + 1}) {step['title']}"
@@ -2346,8 +3021,12 @@ def show_spqr_step_visualization_dialog(
     page: ft.Page,
     step_data: dict[str, Any],
     on_close: Callable[[], None] | None = None,
+    on_show_pqxdh_bootstrap: Callable[[], None] | None = None,
 ) -> None:
-    tooltips = get_tooltip_messages("spqr")
+    tooltips = {
+        **get_tooltip_messages("spqr"),
+        **get_tooltip_messages("pqxdh"),
+    }
     action = str(step_data.get("action", "send")).strip().lower()
     after = step_data.get("after") if isinstance(step_data.get("after"), dict) else {}
     header: SpqrHeader | None = step_data.get("header") if isinstance(step_data.get("header"), SpqrHeader) else None
@@ -2357,6 +3036,14 @@ def show_spqr_step_visualization_dialog(
     steps: list[dict[str, Any]] = [
         _build_intro_step(before, tooltips)
     ]
+
+    if action == "receive":
+        header_split_step = _build_pqxdh_header_split_step(step_data, tooltips)
+        if header_split_step is not None:
+            steps.append(header_split_step)
+        bootstrap_init_step = _build_pqxdh_bootstrap_init_step(step_data, tooltips, on_show_pqxdh_bootstrap)
+        if bootstrap_init_step is not None:
+            steps.append(bootstrap_init_step)
 
     chain_steps = (
         _build_send_steps(state_name, step_data, tooltips)

@@ -20,7 +20,20 @@ def _safe_decode(data: bytes) -> str:
         return data.hex()
 
 
-def _active_chain_values(state: SpqrRatchetState) -> tuple[str, str]:
+def _pqxdh_header_preview(pqxdh_header: dict | None) -> str:
+    if not isinstance(pqxdh_header, dict):
+        return ""
+
+    ik_a = str(pqxdh_header.get("ik_a_public", ""))
+    ek_a = str(pqxdh_header.get("ek_a_public", ""))
+    bob_spk = str(pqxdh_header.get("bob_spk_public", ""))
+    pq_prekey_id = pqxdh_header.get("bob_pq_prekey_id")
+    return f"ik_a={ik_a[-8:]}, ek_a={ek_a[-8:]}, spk_b={bob_spk[-8:]}, pq_id={pq_prekey_id}"
+
+
+def _active_chain_values(state: SpqrRatchetState | None) -> tuple[str, str]:
+    if state is None:
+        return "None", "None"
     chains = state.kdfchains.get(state.epoch)
     if chains is None:
         return "None", "None"
@@ -31,12 +44,26 @@ def _active_chain_values(state: SpqrRatchetState) -> tuple[str, str]:
 
 def _build_party_panel(
     page: ft.Page,
-    state: SpqrRatchetState,
+    state: SpqrRatchetState | None,
     party_name: str,
     perspective: str,
     message_input: ft.TextField | None = None,
     on_send=None,
 ) -> ft.Control:
+    if state is None:
+        return ft.Container(
+            content=ft.Column(
+                [
+                    ft.Text(party_name, size=18, weight="bold"),
+                    ft.Text("Not initialized yet", color=ft.Colors.OUTLINE),
+                ],
+                spacing=4,
+                tight=True,
+            ),
+            width=SIDE_PANEL_WIDTH,
+            padding=10,
+        )
+
     visible = is_party_visible(perspective, party_name)
     send_ck, recv_ck = _active_chain_values(state)
     state_name = type(state.scka_state.node).__name__ if state.scka_state is not None and state.scka_state.node is not None else "None"
@@ -65,7 +92,7 @@ def _build_party_panel(
     )
 
 
-def _build_used_keys_history_panel(page: ft.Page, state: SpqrRatchetState, party_name: str, perspective: str) -> ft.Control:
+def _build_used_keys_history_panel(page: ft.Page, state: SpqrRatchetState | None, party_name: str, perspective: str) -> ft.Control:
     visible = is_party_visible(perspective, party_name)
 
     panel_controls: list[ft.Control] = [
@@ -77,7 +104,9 @@ def _build_used_keys_history_panel(page: ft.Page, state: SpqrRatchetState, party
         ),
     ]
 
-    if not visible:
+    if state is None:
+        panel_controls.append(ft.Text("Not initialized", color=ft.Colors.OUTLINE))
+    elif not visible:
         panel_controls.append(ft.Text("Hidden", color=ft.Colors.OUTLINE))
     else:
         sections: list[tuple[str, list]] = [
@@ -128,6 +157,8 @@ def build_timeline(
     on_receive_pending=None,
     on_show_send_visualization=None,
     on_show_receive_visualization=None,
+    on_show_alice_pqxdh_bootstrap=None,
+    on_show_bob_pqxdh_bootstrap=None,
 ) -> ft.Control:
     perspective_key = perspective.lower()
     col = ft.Column(
@@ -146,6 +177,15 @@ def build_timeline(
         for pending in pending_messages:
             if isinstance(pending.get("id"), int):
                 items.append((pending["id"], "pending", pending))
+
+    bob_initialized = session.bob is not None
+    bob_pqxdh_header: dict | None = None
+    for message in session.message_log:
+        header_candidate = getattr(message, "pqxdh_header", None)
+        receiver_name = getattr(message, "receiver", "")
+        if isinstance(header_candidate, dict) and str(receiver_name).lower() == "bob":
+            bob_pqxdh_header = header_candidate
+            break
 
     for seq_id, kind, entry in sorted(items, key=lambda item: item[0], reverse=True):
         if kind == "received":
@@ -173,12 +213,15 @@ def build_timeline(
             header_text = ""
             if header is not None:
                 header_text = f"epoch={header.msg.epoch}, type={header.msg.msg_type.value}, n={header.n}"
+            pqxdh_text = _pqxdh_header_preview(getattr(entry, "pqxdh_header", None))
+            pqxdh_line = ft.Text(f"pqxdh: {pqxdh_text}") if pqxdh_text else None
             col.controls.append(
                 ft.Container(
                     content=ft.Column(
                         [
                             ft.Row(row_controls),
                             ft.Text(f"header: {header_text}"),
+                            *( [pqxdh_line] if pqxdh_line else [] ),
                             ft.Text(f"message: {body}"),
                         ],
                         spacing=2,
@@ -214,13 +257,18 @@ def build_timeline(
         if header is not None:
             header_text = f"epoch={header.msg.epoch}, type={header.msg.msg_type.value}, n={header.n}"
 
+        pqxdh_header = pending.get("pqxdh_header") if isinstance(pending.get("pqxdh_header"), dict) else None
+        pqxdh_text = _pqxdh_header_preview(pqxdh_header)
+
         body = _safe_decode(plaintext if perspective_key in {"global", sender.lower()} else cipher)
+        pqxdh_line = ft.Text(f"pqxdh: {pqxdh_text}") if pqxdh_text else None
         col.controls.append(
             ft.Container(
                 content=ft.Column(
                     [
                         ft.Row(row_controls),
                         ft.Text(f"header: {header_text}"),
+                        *( [pqxdh_line] if pqxdh_line else [] ),
                         ft.Text(f"message: {body}"),
                     ],
                     spacing=2,
@@ -231,6 +279,22 @@ def build_timeline(
                 border_radius=5,
             )
         )
+
+    bottom_actions: list[ft.Control] = []
+    if on_show_alice_pqxdh_bootstrap is not None and session.alice is not None and perspective_key in {"global", "alice"}:
+        bottom_actions.append(
+            ft.TextButton("Show Alice PQXDH initialization", on_click=lambda e: on_show_alice_pqxdh_bootstrap())
+        )
+    if on_show_bob_pqxdh_bootstrap is not None and bob_initialized and bob_pqxdh_header is not None and perspective_key in {"global", "bob"}:
+        bottom_actions.append(
+            ft.TextButton(
+                "Show Bob PQXDH initialization",
+                on_click=lambda e, header=bob_pqxdh_header: on_show_bob_pqxdh_bootstrap(header),
+            )
+        )
+    if bottom_actions:
+        col.controls.append(ft.Divider(height=8))
+        col.controls.extend(bottom_actions)
 
     return col
 
@@ -247,9 +311,11 @@ def build_visual(
     on_receive_pending=None,
     on_show_send_visualization=None,
     on_show_receive_visualization=None,
+    on_show_alice_pqxdh_bootstrap=None,
+    on_show_bob_pqxdh_bootstrap=None,
 ) -> ft.Control:
-    if session.alice is None or session.bob is None:
-        return ft.Container(content=ft.Text("SPQR session is not initialized."), padding=12)
+    if session.alice is None:
+        return ft.Container(content=ft.Text("SPQR session is not initialized from PQXDH yet."), padding=12)
 
     page_height = getattr(page, "height", None)
     if page_height is None and getattr(page, "window", None) is not None:
@@ -274,6 +340,8 @@ def build_visual(
         on_receive_pending=on_receive_pending,
         on_show_send_visualization=on_show_send_visualization,
         on_show_receive_visualization=on_show_receive_visualization,
+        on_show_alice_pqxdh_bootstrap=on_show_alice_pqxdh_bootstrap,
+        on_show_bob_pqxdh_bootstrap=on_show_bob_pqxdh_bootstrap,
     )
 
     timeline_container = ft.Container(

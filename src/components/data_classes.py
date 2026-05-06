@@ -12,6 +12,7 @@ class AppState:
     current_module: str = ""
     perspective: Perspective = "global"
     x3dh_to_dr_bootstrap: dict | None = None
+    pqxdh_to_spqr_bootstrap: dict | None = None
 
 
 @dataclass
@@ -224,6 +225,7 @@ class SendStepVisualizationSnapshot:
     after: PartyStateSnapshot
     initializer_switch_warning: str | None = None
     x3dh_header: dict[str, Any] | None = None
+    pqxdh_header: dict[str, Any] | None = None
 
 
 @dataclass
@@ -247,6 +249,8 @@ class ReceiveStepVisualizationSnapshot:
     after: PartyStateSnapshot
     x3dh_header: dict[str, Any] | None = None
     was_x3dh_bootstrapped: bool = False
+    pqxdh_header: dict[str, Any] | None = None
+    was_pqxdh_bootstrapped: bool = False
 
 
 def _spqr_encode_bytes(value: bytes | None) -> str | None:
@@ -514,6 +518,7 @@ class SpqrMessageState:
     plaintext: bytes = b""
     decrypted_by_receiver: bytes = b""
     seq_id: int = 0
+    pqxdh_header: dict[str, Any] | None = None
 
 
 @dataclass

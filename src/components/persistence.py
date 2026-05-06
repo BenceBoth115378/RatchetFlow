@@ -13,8 +13,8 @@ import flet as ft
 from common import BASE_DIR, PERSPECTIVE_SET
 from components.data_classes import AppState
 
-MODULE_STATE_FORMAT = "signal-interactive-module-state.v2"
-DESKTOP_STATE_SUBDIR = Path("SignalInteractive") / "module_states"
+MODULE_STATE_FORMAT = "ratchet-flow-module-state.v2"
+DESKTOP_STATE_SUBDIR = Path("RatchetFlow") / "module_states"
 WEB_UPLOAD_DIR = BASE_DIR.parent / "build" / "module_state_uploads"
 
 

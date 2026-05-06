@@ -49,6 +49,15 @@ def _bootstrap_states(shared_secret: bytes = b"spqr-shared-secret"):
     return alice, bob
 
 
+def test_initialize_session_from_pqxdh_initializes_alice_only():
+    session = logic.initialize_session_from_pqxdh(b"pqxdh-shared-secret")
+
+    assert session.alice is not None
+    assert session.bob is None
+    assert session.alice.direction == "A2B"
+    assert 0 in session.alice.kdfchains
+
+
 def test_ratchet_init_sets_complementary_chain_directions():
     alice, bob = _bootstrap_states()
 

@@ -21,6 +21,7 @@ from components.data_classes import (
     SpqrMessageType,
     SpqrRatchetState,
     SpqrSckaMessage,
+    SpqrSessionState,
 )
 
 
@@ -717,6 +718,14 @@ def RatchetInitBobSCKA(sk: bytes) -> SpqrRatchetState:
         MKSKIPPED={},
         direction="B2A",
         scka_state=scka_state,
+    )
+
+
+def initialize_session_from_pqxdh(sk: bytes) -> SpqrSessionState:
+    return SpqrSessionState(
+        alice=RatchetInitAliceSCKA(sk),
+        bob=None,
+        message_log=[],
     )
 
 
