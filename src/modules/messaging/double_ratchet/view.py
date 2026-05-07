@@ -1,12 +1,9 @@
 import flet as ft
 from components.data_classes import DoubleRatchetState
 from components.data_classes import PartyState
-from modules.messaging.messaging_base_view import is_party_visible, build_key_field, get_key_tooltip_text
+from modules.messaging.messaging_base_view import is_party_visible, build_key_field, get_key_tooltip_text, SIDE_PANEL_WIDTH
 from modules.base_view import format_key, last_n_chars, make_copy_handler
 from modules.tooltip_helpers import build_tooltip_text, get_tooltip_messages
-
-
-SIDE_PANEL_WIDTH = 430
 
 
 def _build_party_panel(

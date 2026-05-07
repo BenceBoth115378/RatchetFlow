@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from components.data_classes import PQXDHState
 from modules import external as ext
-
-
-def _generate_dh_key_pair() -> dict[str, str]:
-    pair = ext.GENERATE_DH()
-    return {
-        "private": pair.private,
-        "public": pair.public,
-    }
+from modules.key_exchange.key_exchange_base_logic import (
+    _generate_dh_key_pair,
+    add_event,
+    ensure_alice_local,
+    ensure_bob_local,
+)
 
 
 def _generate_pq_key_pair() -> dict[str, str]:
@@ -41,30 +39,12 @@ def _ensure_server_state(state: PQXDHState) -> dict:
     return state.server_state
 
 
-def add_event(state: PQXDHState, message: str) -> None:
-    state.events.append(message)
-
-
 def _update_alice_upload_opk_flag(state: PQXDHState, server_state: dict) -> None:
     remaining_min = min(
         len(server_state.get("alice_available_opk_ids", [])),
         len(server_state.get("alice_pq_available_opk_ids", [])),
     )
     state.alice_needs_to_upload_opk = remaining_min < 3
-
-
-def ensure_alice_local(state: PQXDHState) -> dict:
-    alice = state.alice_local
-    if not isinstance(alice, dict):
-        raise ValueError("Alice must generate keys first.")
-    return alice
-
-
-def ensure_bob_local(state: PQXDHState) -> dict:
-    bob = state.bob_local
-    if not isinstance(bob, dict):
-        raise ValueError("Bob local state is missing.")
-    return bob
 
 
 def bootstrap_bob_to_server(state: PQXDHState) -> None:
@@ -501,21 +481,6 @@ def alice_generates_ek_and_derives_sk(state: PQXDHState) -> None:
     add_event(state, f"Alice derived PQXDH SK using {pq_key_type} with {len(dh_outputs)} DH operation(s) and 1 PQKEM secret.")
 
 
-def alice_calculates_associated_data(state: PQXDHState) -> None:
-    alice = ensure_alice_local(state)
-    derived = state.alice_derived
-    bundle = state.last_bundle_for_alice
-    if not isinstance(derived, dict) or not isinstance(bundle, dict):
-        raise ValueError("Derive SK first.")
-
-    associated_data = ext.CALC_AD(
-        initiator_identity_public=alice["identity_dh"]["public"],
-        responder_identity_public=bundle["identity_dh_public"],
-    )
-
-    derived["associated_data"] = associated_data
-    add_event(state, "Alice calculated Associated Data (AD).")
-
 
 def alice_sends_initial_message(state: PQXDHState, plaintext: str) -> None:
     alice = ensure_alice_local(state)
@@ -664,10 +629,3 @@ def bob_receives_and_verifies(state: PQXDHState) -> None:
         add_event(state, "Bob processed message but AD or shared secret mismatch occurred.")
 
 
-def is_phase1_done(state: PQXDHState) -> bool:
-    return isinstance(state.server_state.get("alice_bundle"), dict)
-
-
-def is_phase2_done(state: PQXDHState) -> bool:
-    derived = state.alice_derived
-    return isinstance(derived, dict) and isinstance(derived.get("associated_data"), str)

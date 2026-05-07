@@ -4,19 +4,8 @@ import flet as ft
 
 from components.data_classes import SpqrSessionState, SpqrRatchetState
 from modules.base_view import format_key
-from modules.messaging.messaging_base_view import is_party_visible, build_key_field, get_key_tooltip_text
+from modules.messaging.messaging_base_view import is_party_visible, build_key_field, get_key_tooltip_text, SIDE_PANEL_WIDTH, safe_decode_bytes
 from modules.tooltip_helpers import get_tooltip_messages
-
-SIDE_PANEL_WIDTH = 430
-
-
-def _safe_decode(data: bytes) -> str:
-    if not data:
-        return ""
-    try:
-        return data.decode("utf-8")
-    except UnicodeDecodeError:
-        return data.hex()
 
 
 def _pqxdh_header_preview(pqxdh_header: dict | None) -> str:
@@ -193,11 +182,11 @@ def build_timeline(
             header = entry.header
             sender_view = perspective_key in {"global", sender.lower()}
             receiver_view = perspective_key == receiver.lower()
-            body = _safe_decode(entry.plaintext if sender_view else entry.decrypted_by_receiver)
+            body = safe_decode_bytes(entry.plaintext if sender_view else entry.decrypted_by_receiver)
             if not body and receiver_view:
-                body = _safe_decode(entry.decrypted_by_receiver)
+                body = safe_decode_bytes(entry.decrypted_by_receiver)
             if not body:
-                body = _safe_decode(entry.cipher)
+                body = safe_decode_bytes(entry.cipher)
 
             row_controls: list[ft.Control] = [ft.Text(f"[{seq_id}] {sender} -> {receiver} | ")]
             if on_show_send_visualization is not None:
@@ -259,7 +248,7 @@ def build_timeline(
         pqxdh_header = pending.get("pqxdh_header") if isinstance(pending.get("pqxdh_header"), dict) else None
         pqxdh_text = _pqxdh_header_preview(pqxdh_header)
 
-        body = _safe_decode(plaintext if perspective_key in {"global", sender.lower()} else cipher)
+        body = safe_decode_bytes(plaintext if perspective_key in {"global", sender.lower()} else cipher)
         pqxdh_line = ft.Text(f"pqxdh: {pqxdh_text}") if pqxdh_text else None
         col.controls.append(
             ft.Container(

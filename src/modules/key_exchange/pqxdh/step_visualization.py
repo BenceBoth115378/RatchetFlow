@@ -4,36 +4,19 @@ from typing import Any
 
 import flet as ft
 
-from modules.key_exchange import step_visualization_common as shared_steps
+from modules.base_steps import show_step_dialog
+from modules.key_exchange import key_exchange_base_steps as shared_steps
 from modules.key_exchange.x3dh import step_visualization as x3dh_steps
+from modules.tooltip_helpers import get_tooltip_messages
 
 
-def _last_key_chars(value: Any, count: int = 10) -> str:
-    return shared_steps.last_key_chars(value, count)
+def _tt(key: str) -> str:
+    tooltips = {**get_tooltip_messages("x3dh"), **get_tooltip_messages("pqxdh")}
+    message = tooltips.get(key, "")
+    return message if message else "Tooltip missing in src/assets/tooltips.json"
 
-
-def _flow_node(
-    label: str,
-    value: str | None = None,
-    circle: bool = False,
-    width: int = 180,
-    height: int = 90,
-    tooltip: str | None = None,
-    full_value: Any = None,
-) -> ft.Control:
-    return shared_steps.flow_node(label, value, circle, width, height, tooltip, full_value)
-
-
-def _state_panel(
-    title: str,
-    rows: list[tuple[str, str, str | None, Any]],
-    highlight_labels: set[str] | None = None,
-) -> ft.Control:
-    return shared_steps.state_panel(title, rows, highlight_labels)
-
-
-def _alice_local_rows_with_pq(payload: dict | None, tooltips: dict[str, str]) -> list[tuple[str, str, str | None, Any]]:
-    base_rows = x3dh_steps._alice_local_rows(payload, tooltips)
+def _alice_local_rows_with_pq(payload: dict | None) -> list[tuple[str, str, str | None, Any]]:
+    base_rows = x3dh_steps._alice_local_rows(payload)
     if not isinstance(payload, dict):
         return base_rows
 
@@ -41,15 +24,15 @@ def _alice_local_rows_with_pq(payload: dict | None, tooltips: dict[str, str]) ->
     pq_sig = payload.get("pq_signed_prekey_signature")
     pq_opk_map = payload.get("pq_opk_public_by_id") if isinstance(payload.get("pq_opk_public_by_id"), dict) else {}
     return base_rows + [
-        ("PQSPK_pub", _last_key_chars(pq_spk.get("public", "-")), tooltips.get("pqxdh_step_key_pqspk_pub", ""), pq_spk.get("public")),
-        ("PQSPK_priv", _last_key_chars(pq_spk.get("private", "-")), tooltips.get("pqxdh_step_key_pqspk_priv", ""), pq_spk.get("private")),
-        ("Sig_PQSPK", _last_key_chars(pq_sig if pq_sig else "-"), tooltips.get("pqxdh_step_key_pqspk_sig", ""), pq_sig),
-        ("PQOPK_count_local", str(len(pq_opk_map)), tooltips.get("pqxdh_step_state_pqopk_count_local", ""), sorted(pq_opk_map.keys())),
+        ("PQSPK_pub", shared_steps.last_key_chars(pq_spk.get("public", "-")), _tt("pqxdh_step_key_pqspk_pub"), pq_spk.get("public")),
+        ("PQSPK_priv", shared_steps.last_key_chars(pq_spk.get("private", "-")), _tt("pqxdh_step_key_pqspk_priv"), pq_spk.get("private")),
+        ("Sig_PQSPK", shared_steps.last_key_chars(pq_sig if pq_sig else "-"), _tt("pqxdh_step_key_pqspk_sig"), pq_sig),
+        ("PQOPK_count_local", str(len(pq_opk_map)), _tt("pqxdh_step_state_pqopk_count_local"), sorted(pq_opk_map.keys())),
     ]
 
 
-def _server_alice_rows_with_pq(server: dict | None, tooltips: dict[str, str]) -> list[tuple[str, str, str | None, Any]]:
-    base_rows = x3dh_steps._server_alice_rows(server, tooltips)
+def _server_alice_rows_with_pq(server: dict | None) -> list[tuple[str, str, str | None, Any]]:
+    base_rows = x3dh_steps._server_alice_rows(server)
     if not isinstance(server, dict):
         return base_rows
 
@@ -58,15 +41,15 @@ def _server_alice_rows_with_pq(server: dict | None, tooltips: dict[str, str]) ->
     pq_map = server.get("alice_pq_opk_public_by_id", {}) if isinstance(server.get("alice_pq_opk_public_by_id"), dict) else {}
 
     return base_rows + [
-        ("PQSPK_pub(server)", _last_key_chars(bundle.get("pq_signed_prekey_public", "-") if bundle else "-"), tooltips.get("pqxdh_step_key_pqspk_pub", ""), bundle.get("pq_signed_prekey_public") if bundle else None),
-        ("Sig_PQSPK(server)", _last_key_chars(bundle.get("pq_signed_prekey_signature", "-") if bundle else "-"), tooltips.get("pqxdh_step_key_pqspk_sig", ""), bundle.get("pq_signed_prekey_signature") if bundle else None),
-        ("PQOPK_count_server", str(len(pq_ids)), tooltips.get("pqxdh_step_state_pqopk_count_server", ""), pq_ids),
+        ("PQSPK_pub(server)", shared_steps.last_key_chars(bundle.get("pq_signed_prekey_public", "-") if bundle else "-"), _tt("pqxdh_step_key_pqspk_pub"), bundle.get("pq_signed_prekey_public") if bundle else None),
+        ("Sig_PQSPK(server)", shared_steps.last_key_chars(bundle.get("pq_signed_prekey_signature", "-") if bundle else "-"), _tt("pqxdh_step_key_pqspk_sig"), bundle.get("pq_signed_prekey_signature") if bundle else None),
+        ("PQOPK_count_server", str(len(pq_ids)), _tt("pqxdh_step_state_pqopk_count_server"), pq_ids),
         ("PQOPK_ids_server", ", ".join(str(item) for item in pq_ids[:8]) or "-", None, pq_map),
     ]
 
 
-def _server_bob_rows_with_pq(server: dict | None, tooltips: dict[str, str]) -> list[tuple[str, str, str | None, Any]]:
-    base_rows = x3dh_steps._server_bob_rows(server, tooltips)
+def _server_bob_rows_with_pq(server: dict | None) -> list[tuple[str, str, str | None, Any]]:
+    base_rows = x3dh_steps._server_bob_rows(server)
     if not isinstance(server, dict):
         return base_rows
 
@@ -75,32 +58,32 @@ def _server_bob_rows_with_pq(server: dict | None, tooltips: dict[str, str]) -> l
     pq_map = server.get("bob_pq_opk_public_by_id", {}) if isinstance(server.get("bob_pq_opk_public_by_id"), dict) else {}
 
     return base_rows + [
-        ("PQSPK_pub(server)", _last_key_chars(bundle.get("pq_signed_prekey_public", "-") if bundle else "-"), tooltips.get("pqxdh_step_key_pqspk_pub", ""), bundle.get("pq_signed_prekey_public") if bundle else None),
-        ("Sig_PQSPK(server)", _last_key_chars(bundle.get("pq_signed_prekey_signature", "-") if bundle else "-"), tooltips.get("pqxdh_step_key_pqspk_sig", ""), bundle.get("pq_signed_prekey_signature") if bundle else None),
-        ("PQOPK_count_server", str(len(pq_ids)), tooltips.get("pqxdh_step_state_pqopk_count_server", ""), pq_ids),
+        ("PQSPK_pub(server)", shared_steps.last_key_chars(bundle.get("pq_signed_prekey_public", "-") if bundle else "-"), _tt("pqxdh_step_key_pqspk_pub"), bundle.get("pq_signed_prekey_public") if bundle else None),
+        ("Sig_PQSPK(server)", shared_steps.last_key_chars(bundle.get("pq_signed_prekey_signature", "-") if bundle else "-"), _tt("pqxdh_step_key_pqspk_sig"), bundle.get("pq_signed_prekey_signature") if bundle else None),
+        ("PQOPK_count_server", str(len(pq_ids)), _tt("pqxdh_step_state_pqopk_count_server"), pq_ids),
         ("PQOPK_ids_server", ", ".join(str(item) for item in pq_ids[:8]) or "-", None, pq_map),
     ]
 
 
-def _bundle_for_alice_rows_with_pq(bundle: dict | None, tooltips: dict[str, str]) -> list[tuple[str, str, str | None, Any]]:
-    base_rows = x3dh_steps._bundle_for_alice_rows(bundle, tooltips)
+def _bundle_for_alice_rows_with_pq(bundle: dict | None) -> list[tuple[str, str, str | None, Any]]:
+    base_rows = x3dh_steps._bundle_for_alice_rows(bundle)
     if not isinstance(bundle, dict):
         return base_rows
 
     pq_key_type = "PQSPK" if bool(bundle.get("pq_is_last_resort", False)) else "PQOPK"
 
     return base_rows + [
-        ("PQSPK_pub", _last_key_chars(bundle.get("pq_signed_prekey_public", "-")), tooltips.get("pqxdh_step_key_pqspk_pub", ""), bundle.get("pq_signed_prekey_public")),
-        ("PQSPK_sig", _last_key_chars(bundle.get("pq_signed_prekey_signature", "-")), tooltips.get("pqxdh_step_key_pqspk_sig", ""), bundle.get("pq_signed_prekey_signature")),
-        ("PQPKB_id", str(bundle.get("pq_pkb_id", bundle.get("pq_opk_id", "-"))), tooltips.get("pqxdh_step_key_id_kem", ""), bundle.get("pq_pkb_id", bundle.get("pq_opk_id"))),
-        ("PQPKB_pub", _last_key_chars(bundle.get("pq_pkb_public", bundle.get("pq_opk_public", "-"))), tooltips.get("pqxdh_step_key_pqpkb_pub", ""), bundle.get("pq_pkb_public", bundle.get("pq_opk_public"))),
-        ("PQPKB_sig", _last_key_chars(bundle.get("pq_pkb_signature", bundle.get("pq_opk_signature", "-"))), tooltips.get("pqxdh_step_key_pqpkb_sig", ""), bundle.get("pq_pkb_signature", bundle.get("pq_opk_signature"))),
-        ("PQ_key_type", pq_key_type, tooltips.get("used_pq_prekey_type", ""), pq_key_type),
-        ("PQ_is_last_resort", str(bool(bundle.get("pq_is_last_resort", False))), tooltips.get("pqxdh_step_state_pq_is_last_resort", ""), bundle.get("pq_is_last_resort")),
+        ("PQSPK_pub", shared_steps.last_key_chars(bundle.get("pq_signed_prekey_public", "-")), _tt("pqxdh_step_key_pqspk_pub"), bundle.get("pq_signed_prekey_public")),
+        ("PQSPK_sig", shared_steps.last_key_chars(bundle.get("pq_signed_prekey_signature", "-")), _tt("pqxdh_step_key_pqspk_sig"), bundle.get("pq_signed_prekey_signature")),
+        ("PQPKB_id", str(bundle.get("pq_pkb_id", bundle.get("pq_opk_id", "-"))), _tt("pqxdh_step_key_id_kem"), bundle.get("pq_pkb_id", bundle.get("pq_opk_id"))),
+        ("PQPKB_pub", shared_steps.last_key_chars(bundle.get("pq_pkb_public", bundle.get("pq_opk_public", "-"))), _tt("pqxdh_step_key_pqpkb_pub"), bundle.get("pq_pkb_public", bundle.get("pq_opk_public"))),
+        ("PQPKB_sig", shared_steps.last_key_chars(bundle.get("pq_pkb_signature", bundle.get("pq_opk_signature", "-"))), _tt("pqxdh_step_key_pqpkb_sig"), bundle.get("pq_pkb_signature", bundle.get("pq_opk_signature"))),
+        ("PQ_key_type", pq_key_type, _tt("used_pq_prekey_type"), pq_key_type),
+        ("PQ_is_last_resort", str(bool(bundle.get("pq_is_last_resort", False))), _tt("pqxdh_step_state_pq_is_last_resort"), bundle.get("pq_is_last_resort")),
     ]
 
 
-def _build_request_bob_bundle_steps_pqxdh(before_state: dict, after_state: dict, tooltips: dict[str, str]) -> list[dict[str, Any]]:
+def _build_request_bob_bundle_steps_pqxdh(before_state: dict, after_state: dict) -> list[dict[str, Any]]:
     before_server = before_state.get("server_state") if isinstance(before_state.get("server_state"), dict) else {}
     after_server = after_state.get("server_state") if isinstance(after_state.get("server_state"), dict) else {}
     after_bundle = after_state.get("last_bundle_for_alice") if isinstance(after_state.get("last_bundle_for_alice"), dict) else {}
@@ -115,19 +98,19 @@ def _build_request_bob_bundle_steps_pqxdh(before_state: dict, after_state: dict,
     pq_key_type = "PQSPK" if bool(after_bundle.get("pq_is_last_resort", False)) else "PQOPK"
 
     input_controls: list[ft.Control] = [
-        _flow_node("IK_B_pub", _last_key_chars(after_bundle.get("identity_dh_public", "-")), width=220, full_value=after_bundle.get("identity_dh_public"), tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
-        _flow_node("SPK_B_pub", _last_key_chars(after_bundle.get("signed_prekey_public", "-")), width=220, full_value=after_bundle.get("signed_prekey_public"), tooltip=tooltips.get("x3dh_step_key_spk_pub", "")),
-        _flow_node("SPK_B_sig", _last_key_chars(after_bundle.get("signed_prekey_signature", "-")), width=220, full_value=after_bundle.get("signed_prekey_signature"), tooltip=tooltips.get("x3dh_step_key_spk_sig", "")),
-        _flow_node("PQSPK_pub", _last_key_chars(after_bundle.get("pq_signed_prekey_public", "-")), width=220, full_value=after_bundle.get("pq_signed_prekey_public"), tooltip=tooltips.get("x3dh_step_key_spk_pub", "")),
-        _flow_node("PQSPK_sig", _last_key_chars(after_bundle.get("pq_signed_prekey_signature", "-")), width=220, full_value=after_bundle.get("pq_signed_prekey_signature"), tooltip=tooltips.get("x3dh_step_key_spk_sig", "")),
+        shared_steps.var_node("IK_B_pub", shared_steps.last_key_chars(after_bundle.get("identity_dh_public", "-")), width=220, full_value=after_bundle.get("identity_dh_public"), tooltip=_tt("x3dh_step_key_ik_pub")),
+        shared_steps.var_node("SPK_B_pub", shared_steps.last_key_chars(after_bundle.get("signed_prekey_public", "-")), width=220, full_value=after_bundle.get("signed_prekey_public"), tooltip=_tt("x3dh_step_key_spk_pub")),
+        shared_steps.var_node("SPK_B_sig", shared_steps.last_key_chars(after_bundle.get("signed_prekey_signature", "-")), width=220, full_value=after_bundle.get("signed_prekey_signature"), tooltip=_tt("x3dh_step_key_spk_sig")),
+        shared_steps.var_node("PQSPK_pub", shared_steps.last_key_chars(after_bundle.get("pq_signed_prekey_public", "-")), width=220, full_value=after_bundle.get("pq_signed_prekey_public"), tooltip=_tt("x3dh_step_key_spk_pub")),
+        shared_steps.var_node("PQSPK_sig", shared_steps.last_key_chars(after_bundle.get("pq_signed_prekey_signature", "-")), width=220, full_value=after_bundle.get("pq_signed_prekey_signature"), tooltip=_tt("x3dh_step_key_spk_sig")),
     ]
     if opk_pub not in {None, "", "-"}:
         input_controls.append(
-            _flow_node("OPK_B_pub", _last_key_chars(opk_pub), width=220, full_value=opk_pub, tooltip=tooltips.get("x3dh_step_key_opk_pub", ""))
+            shared_steps.var_node("OPK_B_pub", shared_steps.last_key_chars(opk_pub), width=220, full_value=opk_pub, tooltip=_tt("x3dh_step_key_opk_pub"))
         )
     if pq_opk_pub not in {None, "", "-"}:
         input_controls.append(
-            _flow_node("PQOPK_B_pub", _last_key_chars(pq_opk_pub), width=220, full_value=pq_opk_pub, tooltip=tooltips.get("x3dh_step_key_opk_pub", ""))
+            shared_steps.var_node("PQOPK_B_pub", shared_steps.last_key_chars(pq_opk_pub), width=220, full_value=pq_opk_pub, tooltip=_tt("x3dh_step_key_opk_pub"))
         )
 
     step1 = ft.Column(
@@ -135,7 +118,7 @@ def _build_request_bob_bundle_steps_pqxdh(before_state: dict, after_state: dict,
             ft.Text("1) Server and Alice state before request", weight="bold"),
             ft.Row(
                 controls=[
-                    _state_panel("Server Bob state (before)", _server_bob_rows_with_pq(before_server, tooltips)),
+                    shared_steps.state_panel("Server Bob state (before)", _server_bob_rows_with_pq(before_server)),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=20,
@@ -156,14 +139,14 @@ def _build_request_bob_bundle_steps_pqxdh(before_state: dict, after_state: dict,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("REQUEST_BUNDLE", circle=True, width=220, tooltip=tooltips.get("x3dh_step_node_request_bundle", "")),
+            shared_steps.func_node("REQUEST_BUNDLE", width=220, tooltip=_tt("x3dh_step_node_request_bundle")),
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    _flow_node("Output: Bob bundle", "cached in last_bundle_for_alice", width=280, height=90, full_value=after_bundle),
-                    _flow_node("Output: EC OPK id", str(opk_id if opk_id is not None else "-"), width=220, height=90, full_value=opk_id),
-                    _flow_node("Output: PQPKB id", str(pq_pkb_id if pq_pkb_id is not None else pq_opk_id if pq_opk_id is not None else "-"), width=220, height=90, full_value=pq_pkb_id if pq_pkb_id is not None else pq_opk_id),
-                    _flow_node("Output: PQ key type", pq_key_type, width=220, height=90, full_value=pq_key_type),
+                    shared_steps.var_node("Output: Bob bundle", "cached in last_bundle_for_alice", width=280, height=90, full_value=after_bundle),
+                    shared_steps.var_node("Output: EC OPK id", str(opk_id if opk_id is not None else "-"), width=220, height=90, full_value=opk_id),
+                    shared_steps.var_node("Output: PQPKB id", str(pq_pkb_id if pq_pkb_id is not None else pq_opk_id if pq_opk_id is not None else "-"), width=220, height=90, full_value=pq_pkb_id if pq_pkb_id is not None else pq_opk_id),
+                    shared_steps.var_node("Output: PQ key type", pq_key_type, width=220, height=90, full_value=pq_key_type),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
@@ -171,8 +154,8 @@ def _build_request_bob_bundle_steps_pqxdh(before_state: dict, after_state: dict,
             ),
             ft.Row(
                 controls=[
-                    _flow_node("PQPKB_pub", _last_key_chars(pq_pkb_pub), width=260, full_value=pq_pkb_pub),
-                    _flow_node("PQPKB_sig", _last_key_chars(pq_pkb_sig), width=260, full_value=pq_pkb_sig),
+                    shared_steps.var_node("PQPKB_pub", shared_steps.last_key_chars(pq_pkb_pub), width=260, full_value=pq_pkb_pub),
+                    shared_steps.var_node("PQPKB_sig", shared_steps.last_key_chars(pq_pkb_sig), width=260, full_value=pq_pkb_sig),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=14,
@@ -188,8 +171,8 @@ def _build_request_bob_bundle_steps_pqxdh(before_state: dict, after_state: dict,
             ft.Text("3) State after request", weight="bold"),
             ft.Row(
                 controls=[
-                    _state_panel("Server Bob state (after)", _server_bob_rows_with_pq(after_server, tooltips), highlight_labels={"Bob_OPK_count_server", "Bob_OPK_ids_server", "PQOPK_count_server", "PQOPK_ids_server"}),
-                    _state_panel("Alice bundle cache (after)", _bundle_for_alice_rows_with_pq(after_bundle, tooltips)),
+                    shared_steps.state_panel("Server Bob state (after)", _server_bob_rows_with_pq(after_server), highlight_labels={"Bob_OPK_count_server", "Bob_OPK_ids_server", "PQOPK_count_server", "PQOPK_ids_server"}),
+                    shared_steps.state_panel("Alice bundle cache (after)", _bundle_for_alice_rows_with_pq(after_bundle)),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=20,
@@ -207,7 +190,7 @@ def _build_request_bob_bundle_steps_pqxdh(before_state: dict, after_state: dict,
     ]
 
 
-def _build_verify_signature_steps_pqxdh(before_state: dict, after_state: dict, tooltips: dict[str, str]) -> list[dict[str, Any]]:
+def _build_verify_signature_steps_pqxdh(before_state: dict, after_state: dict) -> list[dict[str, Any]]:
     bundle = after_state.get("last_bundle_for_alice") if isinstance(after_state.get("last_bundle_for_alice"), dict) else {}
     verify_ec = bool(after_state.get("phase2_signature_verified", False))
     pq_pkb_pub = bundle.get("pq_pkb_public", bundle.get("pq_prekey_public", "-"))
@@ -216,7 +199,7 @@ def _build_verify_signature_steps_pqxdh(before_state: dict, after_state: dict, t
     step1 = ft.Column(
         controls=[
             ft.Text("1) Inputs for PQXDH signature verification", weight="bold"),
-            _state_panel("Alice bundle cache", _bundle_for_alice_rows_with_pq(bundle, tooltips)),
+            shared_steps.state_panel("Alice bundle cache", _bundle_for_alice_rows_with_pq(bundle)),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -227,18 +210,18 @@ def _build_verify_signature_steps_pqxdh(before_state: dict, after_state: dict, t
             ft.Text("2) Verify Bob EC SPK signature", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("IK_B_pub", _last_key_chars(bundle.get("identity_dh_public", "-")), width=220, full_value=bundle.get("identity_dh_public"), tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
-                    _flow_node("SPK_B_pub", _last_key_chars(bundle.get("signed_prekey_public", "-")), width=220, full_value=bundle.get("signed_prekey_public"), tooltip=tooltips.get("x3dh_step_key_spk_pub", "")),
-                    _flow_node("SPK_B_sig", _last_key_chars(bundle.get("signed_prekey_signature", "-")), width=220, full_value=bundle.get("signed_prekey_signature"), tooltip=tooltips.get("x3dh_step_key_spk_sig", "")),
+                    shared_steps.var_node("IK_B_pub", shared_steps.last_key_chars(bundle.get("identity_dh_public", "-")), width=220, full_value=bundle.get("identity_dh_public"), tooltip=_tt("x3dh_step_key_ik_pub")),
+                    shared_steps.var_node("SPK_B_pub", shared_steps.last_key_chars(bundle.get("signed_prekey_public", "-")), width=220, full_value=bundle.get("signed_prekey_public"), tooltip=_tt("x3dh_step_key_spk_pub")),
+                    shared_steps.var_node("SPK_B_sig", shared_steps.last_key_chars(bundle.get("signed_prekey_signature", "-")), width=220, full_value=bundle.get("signed_prekey_signature"), tooltip=_tt("x3dh_step_key_spk_sig")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("VERIFY_EC", circle=True, width=180),
+            shared_steps.func_node("VERIFY_EC", width=180),
             ft.Text("↓", size=24),
-            _flow_node("EC valid", str(verify_ec), width=260, full_value=verify_ec),
+            shared_steps.var_node("EC valid", str(verify_ec), width=260, full_value=verify_ec),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -249,18 +232,18 @@ def _build_verify_signature_steps_pqxdh(before_state: dict, after_state: dict, t
             ft.Text("3) Verify Bob PQPKB signature", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("IK_B_pub", _last_key_chars(bundle.get("identity_dh_public", "-")), width=220, full_value=bundle.get("identity_dh_public"), tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
-                    _flow_node("PQPKB_pub", _last_key_chars(pq_pkb_pub), width=220, full_value=pq_pkb_pub, tooltip=tooltips.get("pqxdh_step_key_pqpkb_pub", "")),
-                    _flow_node("PQPKB_sig", _last_key_chars(pq_pkb_sig), width=220, full_value=pq_pkb_sig, tooltip=tooltips.get("pqxdh_step_key_pqpkb_sig", "")),
+                    shared_steps.var_node("IK_B_pub", shared_steps.last_key_chars(bundle.get("identity_dh_public", "-")), width=220, full_value=bundle.get("identity_dh_public"), tooltip=_tt("x3dh_step_key_ik_pub")),
+                    shared_steps.var_node("PQPKB_pub", shared_steps.last_key_chars(pq_pkb_pub), width=220, full_value=pq_pkb_pub, tooltip=_tt("pqxdh_step_key_pqpkb_pub")),
+                    shared_steps.var_node("PQPKB_sig", shared_steps.last_key_chars(pq_pkb_sig), width=220, full_value=pq_pkb_sig, tooltip=_tt("pqxdh_step_key_pqpkb_sig")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("VERIFY_PQ", circle=True, width=180, tooltip=tooltips.get("pqxdh_step_node_verify_pq", "")),
+            shared_steps.func_node("VERIFY_PQ", width=180, tooltip=_tt("pqxdh_step_node_verify_pq")),
             ft.Text("↓", size=24),
-            _flow_node("PQ valid", str(verify_ec), width=260, full_value=verify_ec),
+            shared_steps.var_node("PQ valid", str(verify_ec), width=260, full_value=verify_ec),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -274,7 +257,7 @@ def _build_verify_signature_steps_pqxdh(before_state: dict, after_state: dict, t
     ]
 
 
-def _build_generate_ek_and_sk_steps_pqxdh(before_state: dict, after_state: dict, tooltips: dict[str, str]) -> list[dict[str, Any]]:
+def _build_generate_ek_and_sk_steps_pqxdh(before_state: dict, after_state: dict) -> list[dict[str, Any]]:
     alice = after_state.get("alice_local") if isinstance(after_state.get("alice_local"), dict) else {}
     bundle = after_state.get("last_bundle_for_alice") if isinstance(after_state.get("last_bundle_for_alice"), dict) else {}
     derived = after_state.get("alice_derived") if isinstance(after_state.get("alice_derived"), dict) else {}
@@ -296,11 +279,11 @@ def _build_generate_ek_and_sk_steps_pqxdh(before_state: dict, after_state: dict,
     step1 = ft.Column(
         controls=[
             ft.Text("1) Inputs and precondition", weight="bold"),
-            _state_panel(
+            shared_steps.state_panel(
                 "Precondition",
                 [("Signature verified", str(bool(before_state.get("phase2_signature_verified", False))), None, before_state.get("phase2_signature_verified", False))],
             ),
-            _state_panel("Bundle inputs", _bundle_for_alice_rows_with_pq(bundle, tooltips)),
+            shared_steps.state_panel("Bundle inputs", _bundle_for_alice_rows_with_pq(bundle)),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -309,12 +292,12 @@ def _build_generate_ek_and_sk_steps_pqxdh(before_state: dict, after_state: dict,
     step2 = ft.Column(
         controls=[
             ft.Text("2) Generate ephemeral curve key EK", weight="bold"),
-            _flow_node("GENERATE_DH", circle=True, width=200, tooltip=tooltips.get("x3dh_step_node_generate_dh", "")),
+            shared_steps.func_node("GENERATE_DH", width=200, tooltip=_tt("x3dh_step_node_generate_dh")),
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    _flow_node("EK_pub", _last_key_chars(ek_pub), width=240, full_value=ek_pub, tooltip=tooltips.get("x3dh_step_key_ek_pub", "")),
-                    _flow_node("EK_priv", _last_key_chars(ek_priv), width=240, full_value=ek_priv, tooltip=tooltips.get("x3dh_step_key_ek_priv", "")),
+                    shared_steps.var_node("EK_pub", shared_steps.last_key_chars(ek_pub), width=240, full_value=ek_pub, tooltip=_tt("x3dh_step_key_ek_pub")),
+                    shared_steps.var_node("EK_priv", shared_steps.last_key_chars(ek_priv), width=240, full_value=ek_priv, tooltip=_tt("x3dh_step_key_ek_priv")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=20,
@@ -329,20 +312,20 @@ def _build_generate_ek_and_sk_steps_pqxdh(before_state: dict, after_state: dict,
             ft.Text(f"3) PQKEM-ENC with Bob's selected PQPKB ({pq_key_type})", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("PQPKB_pub", _last_key_chars(pq_pkb_pub), width=300, full_value=pq_pkb_pub, tooltip=tooltips.get("pqxdh_step_key_pqpkb_pub", "")),
-                    _flow_node("PQ key type", pq_key_type, width=220, full_value=pq_key_type, tooltip=tooltips.get("used_pq_prekey_type", "")),
+                    shared_steps.var_node("PQPKB_pub", shared_steps.last_key_chars(pq_pkb_pub), width=300, full_value=pq_pkb_pub, tooltip=_tt("pqxdh_step_key_pqpkb_pub")),
+                    shared_steps.var_node("PQ key type", pq_key_type, width=220, full_value=pq_key_type, tooltip=_tt("used_pq_prekey_type")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("PQKEM-ENC", circle=True, width=200, tooltip=tooltips.get("pqxdh_step_node_pqkem_enc", "")),
+            shared_steps.func_node("PQKEM-ENC", width=200, tooltip=_tt("pqxdh_step_node_pqkem_enc")),
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    _flow_node("CT", _last_key_chars(pq_ct), width=260, full_value=pq_ct, tooltip=tooltips.get("pqxdh_step_key_ct", "")),
-                    _flow_node("SS", _last_key_chars(pq_ss), width=260, full_value=pq_ss, tooltip=tooltips.get("pqxdh_step_key_ss", "")),
+                    shared_steps.var_node("CT", shared_steps.last_key_chars(pq_ct), width=260, full_value=pq_ct, tooltip=_tt("pqxdh_step_key_ct")),
+                    shared_steps.var_node("SS", shared_steps.last_key_chars(pq_ss), width=260, full_value=pq_ss, tooltip=_tt("pqxdh_step_key_ss")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
@@ -354,23 +337,23 @@ def _build_generate_ek_and_sk_steps_pqxdh(before_state: dict, after_state: dict,
     )
 
     dh_controls: list[ft.Control] = [
-        _flow_node("DH1", "DH(IKA, SPKB)", width=420, full_value=f"IKA_priv={ik_priv}\nSPKB_pub={spk_b_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
-        _flow_node("DH2", "DH(EKA, IKB)", width=420, full_value=f"EKA_priv={ek_priv}\nIKB_pub={ik_b_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
-        _flow_node("DH3", "DH(EKA, SPKB)", width=420, full_value=f"EKA_priv={ek_priv}\nSPKB_pub={spk_b_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
+        shared_steps.var_node("DH1", "DH(IKA, SPKB)", width=420, full_value=f"IKA_priv={ik_priv}\nSPKB_pub={spk_b_pub}", tooltip=_tt("x3dh_step_node_dh")),
+        shared_steps.var_node("DH2", "DH(EKA, IKB)", width=420, full_value=f"EKA_priv={ek_priv}\nIKB_pub={ik_b_pub}", tooltip=_tt("x3dh_step_node_dh")),
+        shared_steps.var_node("DH3", "DH(EKA, SPKB)", width=420, full_value=f"EKA_priv={ek_priv}\nSPKB_pub={spk_b_pub}", tooltip=_tt("x3dh_step_node_dh")),
     ]
     if opk_b_pub not in {None, "", "-"}:
-        dh_controls.append(_flow_node("DH4", "DH(EKA, OPKB)", width=420, full_value=opk_b_pub, tooltip=tooltips.get("x3dh_step_node_dh", "")))
+        dh_controls.append(shared_steps.var_node("DH4", "DH(EKA, OPKB)", width=420, full_value=opk_b_pub, tooltip=_tt("x3dh_step_node_dh")))
 
-    dh_controls.append(_flow_node("SS", "PQKEM-SS", width=420, full_value=f"PQSS={pq_ss}", tooltip=tooltips.get("pqxdh_step_key_ss", "")))
+    dh_controls.append(shared_steps.var_node("SS", "PQKEM-SS", width=420, full_value=f"PQSS={pq_ss}", tooltip=_tt("pqxdh_step_key_ss")))
 
     step4 = ft.Column(
         controls=[
             ft.Text("4) Compute DH outputs and derive SK", weight="bold"),
             *dh_controls,
             ft.Text("↓", size=24),
-            _flow_node("KDF_SK", circle=True, width=180, tooltip=tooltips.get("x3dh_step_node_kdf_sk", "")),
+            shared_steps.func_node("KDF_SK", width=180, tooltip=_tt("x3dh_step_node_kdf_sk")),
             ft.Text("↓", size=24),
-            _flow_node("SK", _last_key_chars(sk), width=380, full_value=sk, tooltip=tooltips.get("x3dh_step_key_sk", "")),
+            shared_steps.var_node("SK", shared_steps.last_key_chars(sk), width=380, full_value=sk, tooltip=_tt("x3dh_step_key_sk")),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -379,7 +362,7 @@ def _build_generate_ek_and_sk_steps_pqxdh(before_state: dict, after_state: dict,
     step5 = ft.Column(
         controls=[
             ft.Text("5) Derived state after operation", weight="bold"),
-            _state_panel("Alice derived (after)", x3dh_steps._alice_derived_rows(after_state.get("alice_derived"), tooltips), highlight_labels={"EK_pub", "EK_priv", "SK", "DH_count"}),
+            shared_steps.state_panel("Alice derived (after)", x3dh_steps._alice_derived_rows(after_state.get("alice_derived")), highlight_labels={"EK_pub", "EK_priv", "SK", "DH_count"}),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -394,7 +377,7 @@ def _build_generate_ek_and_sk_steps_pqxdh(before_state: dict, after_state: dict,
     ]
 
 
-def _build_calculate_ad_steps_pqxdh(before_state: dict, after_state: dict, tooltips: dict[str, str]) -> list[dict[str, Any]]:
+def _build_calculate_ad_steps_pqxdh(before_state: dict, after_state: dict) -> list[dict[str, Any]]:
     alice = after_state.get("alice_local") if isinstance(after_state.get("alice_local"), dict) else {}
     bundle = after_state.get("last_bundle_for_alice") if isinstance(after_state.get("last_bundle_for_alice"), dict) else {}
     derived = after_state.get("alice_derived") if isinstance(after_state.get("alice_derived"), dict) else {}
@@ -409,17 +392,17 @@ def _build_calculate_ad_steps_pqxdh(before_state: dict, after_state: dict, toolt
             ft.Text('Alice calculates associated data with party identity binding:\nAD = EncodeEC(IKA) || EncodeEC(IKB)', text_align=ft.TextAlign.CENTER),
             ft.Row(
                 controls=[
-                    _flow_node("IK_A_pub", _last_key_chars(ik_a_pub), width=220, full_value=ik_a_pub, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
-                    _flow_node("IK_B_pub", _last_key_chars(ik_b_pub), width=220, full_value=ik_b_pub, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
+                    shared_steps.var_node("IK_A_pub", shared_steps.last_key_chars(ik_a_pub), width=220, full_value=ik_a_pub, tooltip=_tt("x3dh_step_key_ik_pub")),
+                    shared_steps.var_node("IK_B_pub", shared_steps.last_key_chars(ik_b_pub), width=220, full_value=ik_b_pub, tooltip=_tt("x3dh_step_key_ik_pub")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("CALC_AD", circle=True, width=200, tooltip=tooltips.get("x3dh_step_node_calc_ad", "")),
+            shared_steps.func_node("CALC_AD", width=200, tooltip=_tt("x3dh_step_node_calc_ad")),
             ft.Text("↓", size=24),
-            _flow_node("AD", _last_key_chars(ad), width=460, full_value=ad, tooltip=tooltips.get("x3dh_step_key_ad", "")),
+            shared_steps.var_node("AD", shared_steps.last_key_chars(ad), width=460, full_value=ad, tooltip=_tt("x3dh_step_key_ad")),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -433,7 +416,6 @@ def _build_calculate_ad_steps_pqxdh(before_state: dict, after_state: dict, toolt
 def _build_send_initial_message_steps_pqxdh(
     before_state: dict,
     after_state: dict,
-    tooltips: dict[str, str],
     action_context: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     _ = action_context
@@ -460,9 +442,9 @@ def _build_send_initial_message_steps_pqxdh(
             ft.Text("1) Build initial message header", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("IK_A_pub", _last_key_chars(ik_a_public), width=220, full_value=ik_a_public, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
-                    _flow_node("EK_A_pub", _last_key_chars(ek_a_public), width=220, full_value=ek_a_public, tooltip=tooltips.get("x3dh_step_key_ek_pub", "")),
-                    _flow_node("CT", _last_key_chars(ct), width=220, full_value=ct, tooltip=tooltips.get("pqxdh_step_key_ct", "")),
+                    shared_steps.var_node("IK_A_pub", shared_steps.last_key_chars(ik_a_public), width=220, full_value=ik_a_public, tooltip=_tt("x3dh_step_key_ik_pub")),
+                    shared_steps.var_node("EK_A_pub", shared_steps.last_key_chars(ek_a_public), width=220, full_value=ek_a_public, tooltip=_tt("x3dh_step_key_ek_pub")),
+                    shared_steps.var_node("CT", shared_steps.last_key_chars(ct), width=220, full_value=ct, tooltip=_tt("pqxdh_step_key_ct")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
@@ -470,19 +452,19 @@ def _build_send_initial_message_steps_pqxdh(
             ),
             ft.Row(
                 controls=[
-                    _flow_node("Bob_SPK_pub", _last_key_chars(bob_spk_public), width=220, full_value=bob_spk_public, tooltip=tooltips.get("x3dh_step_key_spk_pub", "")),
-                    _flow_node("IdEC(OPKB)", str(bob_opk_id), width=220, full_value=bob_opk_id, tooltip=tooltips.get("pqxdh_step_key_id_ec", "")),
-                    _flow_node("IdKEM(PQPKB)", str(bob_pq_pkb_id), width=220, full_value=bob_pq_pkb_id, tooltip=tooltips.get("pqxdh_step_key_id_kem", "")),
-                    _flow_node("PQ key type", pq_key_type, width=220, full_value=pq_key_type, tooltip=tooltips.get("used_pq_prekey_type", "")),
+                    shared_steps.var_node("Bob_SPK_pub", shared_steps.last_key_chars(bob_spk_public), width=220, full_value=bob_spk_public, tooltip=_tt("x3dh_step_key_spk_pub")),
+                    shared_steps.var_node("IdEC(OPKB)", str(bob_opk_id), width=220, full_value=bob_opk_id, tooltip=_tt("pqxdh_step_key_id_ec")),
+                    shared_steps.var_node("IdKEM(PQPKB)", str(bob_pq_pkb_id), width=220, full_value=bob_pq_pkb_id, tooltip=_tt("pqxdh_step_key_id_kem")),
+                    shared_steps.var_node("PQ key type", pq_key_type, width=220, full_value=pq_key_type, tooltip=_tt("used_pq_prekey_type")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("BUILD_HEADER", circle=True, width=220, tooltip=tooltips.get("x3dh_step_node_build_header", "")),
+            shared_steps.func_node("BUILD_HEADER", width=220, tooltip=_tt("x3dh_step_node_build_header")),
             ft.Text("↓", size=24),
-            _flow_node("Header", "IKA | EKA | CT | IdEC(OPKB) | IdKEM(PQPKB) ", width=680, height=95, full_value=header, tooltip=tooltips.get("x3dh_step_node_header", "")),
+            shared_steps.var_node("Header", "IKA | EKA | CT | IdEC(OPKB) | IdKEM(PQPKB) ", width=680, height=95, full_value=header, tooltip=_tt("x3dh_step_node_header")),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -493,16 +475,16 @@ def _build_send_initial_message_steps_pqxdh(
             ft.Text("2) Encrypt initial payload with SK and AD context", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("SK", _last_key_chars(sk), width=260, full_value=sk, tooltip=tooltips.get("x3dh_step_key_sk", "")),
-                    _flow_node("AD", _last_key_chars(ad), width=260, full_value=ad, tooltip=tooltips.get("x3dh_step_key_ad", "")),
+                    shared_steps.var_node("SK", shared_steps.last_key_chars(sk), width=260, full_value=sk, tooltip=_tt("x3dh_step_key_sk")),
+                    shared_steps.var_node("AD", shared_steps.last_key_chars(ad), width=260, full_value=ad, tooltip=_tt("x3dh_step_key_ad")),
                 ],
                 spacing=14,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("ENCRYPT", circle=True, width=180, tooltip=tooltips.get("x3dh_step_node_encrypt", "")),
+            shared_steps.func_node("ENCRYPT", width=180, tooltip=_tt("x3dh_step_node_encrypt")),
             ft.Text("↓", size=24),
-            _flow_node("Ciphertext", _last_key_chars(ciphertext), width=560, full_value=ciphertext, tooltip=tooltips.get("x3dh_step_key_ciphertext", "")),
+            shared_steps.var_node("Ciphertext", shared_steps.last_key_chars(ciphertext), width=560, full_value=ciphertext, tooltip=_tt("x3dh_step_key_ciphertext")),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -513,17 +495,17 @@ def _build_send_initial_message_steps_pqxdh(
             ft.Text("3) Send initial PQXDH message to Bob", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("Header", "IKA | EKA | CT | IdEC(OPKB) | IdKEM(PQPKB)", width=340, full_value=header, tooltip=tooltips.get("x3dh_step_node_header", "")),
-                    _flow_node("Ciphertext", _last_key_chars(ciphertext), width=320, full_value=ciphertext, tooltip=tooltips.get("x3dh_step_key_ciphertext", "")),
+                    shared_steps.var_node("Header", "IKA | EKA | CT | IdEC(OPKB) | IdKEM(PQPKB)", width=340, full_value=header, tooltip=_tt("x3dh_step_node_header")),
+                    shared_steps.var_node("Ciphertext", shared_steps.last_key_chars(ciphertext), width=320, full_value=ciphertext, tooltip=_tt("x3dh_step_key_ciphertext")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("SEND", circle=True, width=180, tooltip=tooltips.get("x3dh_step_node_send", "")),
+            shared_steps.func_node("SEND", width=180, tooltip=_tt("x3dh_step_node_send")),
             ft.Text("↓", size=24),
-            _flow_node("Transport", "Alice -> Bob", width=320, full_value=message, tooltip=tooltips.get("x3dh_step_node_transport", "")),
+            shared_steps.var_node("Transport", "Alice -> Bob", width=320, full_value=message, tooltip=_tt("x3dh_step_node_transport")),
             shared_steps.build_message_state_panel(before_state, after_state),
         ],
         spacing=8,
@@ -537,7 +519,7 @@ def _build_send_initial_message_steps_pqxdh(
     ]
 
 
-def _build_bob_receives_steps_pqxdh(before_state: dict, after_state: dict, tooltips: dict[str, str]) -> list[dict[str, Any]]:
+def _build_bob_receives_steps_pqxdh(before_state: dict, after_state: dict) -> list[dict[str, Any]]:
     bob = after_state.get("bob_local") if isinstance(after_state.get("bob_local"), dict) else {}
     msg = after_state.get("initial_message") if isinstance(after_state.get("initial_message"), dict) else {}
     result = after_state.get("bob_receive_result") if isinstance(after_state.get("bob_receive_result"), dict) else {}
@@ -556,15 +538,15 @@ def _build_bob_receives_steps_pqxdh(before_state: dict, after_state: dict, toolt
     step1 = ft.Column(
         controls=[
             ft.Text("1) Bob receives Alice initial message", weight="bold"),
-            _flow_node(
+            shared_steps.var_node(
                 "Header",
                 "IKA | EKA | CT | IdEC(OPKB) | IdKEM(PQPKB)",
                 width=700,
                 height=95,
                 full_value=header,
-                tooltip=tooltips.get("x3dh_step_node_header", ""),
+                tooltip=_tt("x3dh_step_node_header"),
             ),
-            _state_panel("Initial message", x3dh_steps._initial_message_rows(msg, tooltips)),
+            shared_steps.state_panel("Initial message", x3dh_steps._initial_message_rows(msg)),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -575,40 +557,40 @@ def _build_bob_receives_steps_pqxdh(before_state: dict, after_state: dict, toolt
             ft.Text("2) Decapsulate CT using PQPKB_priv", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("PQPKB_priv", "cached from bundle request", width=300, full_value=result.get("pq_pkb_private"), tooltip=tooltips.get("pqxdh_step_key_pqpkb_priv", "")),
-                    _flow_node("CT", _last_key_chars(pq_ciphertext), width=260, full_value=pq_ciphertext, tooltip=tooltips.get("pqxdh_step_key_ct", "")),
-                    _flow_node("PQ key type", pq_key_type, width=220, full_value=pq_key_type, tooltip=tooltips.get("used_pq_prekey_type", "")),
+                    shared_steps.var_node("PQPKB_priv", "cached from bundle request", width=300, full_value=result.get("pq_pkb_private"), tooltip=_tt("pqxdh_step_key_pqpkb_priv")),
+                    shared_steps.var_node("CT", shared_steps.last_key_chars(pq_ciphertext), width=260, full_value=pq_ciphertext, tooltip=_tt("pqxdh_step_key_ct")),
+                    shared_steps.var_node("PQ key type", pq_key_type, width=220, full_value=pq_key_type, tooltip=_tt("used_pq_prekey_type")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=14,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("PQKEM-DEC", width=420, circle=True, tooltip=tooltips.get("pqxdh_step_node_pqkem_dec", "")),
+            shared_steps.func_node("PQKEM-DEC", width=420, tooltip=_tt("pqxdh_step_node_pqkem_dec")),
             ft.Text("↓", size=24),
-            _flow_node("SS", "PQ shared secret", width=320, full_value=result.get("pq_secret_included"), tooltip=tooltips.get("pqxdh_step_key_ss", "")),
+            shared_steps.var_node("SS", "PQ shared secret", width=320, full_value=result.get("pq_secret_included"), tooltip=_tt("pqxdh_step_key_ss")),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
     dh_controls: list[ft.Control] = [
-        _flow_node("DH1", "DH(SPK_B_priv, IK_A_pub)", width=420, full_value=ik_a_public, tooltip=tooltips.get("x3dh_step_node_dh", "")),
-        _flow_node("DH2", "DH(IK_B_priv, EK_A_pub)", width=420, full_value=ek_a_public, tooltip=tooltips.get("x3dh_step_node_dh", "")),
-        _flow_node("DH3", "DH(SPK_B_priv, EK_A_pub)", width=420, full_value=bob_spk_public, tooltip=tooltips.get("x3dh_step_node_dh", "")),
+        shared_steps.var_node("DH1", "DH(SPK_B_priv, IK_A_pub)", width=420, full_value=ik_a_public, tooltip=_tt("x3dh_step_node_dh")),
+        shared_steps.var_node("DH2", "DH(IK_B_priv, EK_A_pub)", width=420, full_value=ek_a_public, tooltip=_tt("x3dh_step_node_dh")),
+        shared_steps.var_node("DH3", "DH(SPK_B_priv, EK_A_pub)", width=420, full_value=bob_spk_public, tooltip=_tt("x3dh_step_node_dh")),
     ]
     if bob_opk_id is not None:
-        dh_controls.append(_flow_node("DH4", "DH(OPK_B_priv, EK_A_pub)", width=420, full_value=bob_opk_id, tooltip=tooltips.get("x3dh_step_node_dh", "")))
-    dh_controls.append(_flow_node("SS", "PQKEM-SS", width=420, full_value=result.get("pq_secret_included"), tooltip=tooltips.get("pqxdh_step_key_ss", "")))
+        dh_controls.append(shared_steps.var_node("DH4", "DH(OPK_B_priv, EK_A_pub)", width=420, full_value=bob_opk_id, tooltip=_tt("x3dh_step_node_dh")))
+    dh_controls.append(shared_steps.var_node("SS", "PQKEM-SS", width=420, full_value=result.get("pq_secret_included"), tooltip=_tt("pqxdh_step_key_ss")))
 
     step3 = ft.Column(
         controls=[
             ft.Text("3) Calculate SK", weight="bold"),
             *dh_controls,
             ft.Text("↓", size=24),
-            _flow_node("KDF_SK", circle=True, width=180, tooltip=tooltips.get("x3dh_step_node_kdf_sk", "")),
+            shared_steps.func_node("KDF_SK", width=180, tooltip=_tt("x3dh_step_node_kdf_sk")),
             ft.Text("↓", size=24),
-            _flow_node("Bob SK", _last_key_chars(result.get("bob_shared_secret", "-")), width=380, full_value=result.get("bob_shared_secret"), tooltip=tooltips.get("x3dh_step_key_sk", "")),
+            shared_steps.var_node("Bob SK", shared_steps.last_key_chars(result.get("bob_shared_secret", "-")), width=380, full_value=result.get("bob_shared_secret"), tooltip=_tt("x3dh_step_key_sk")),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -629,17 +611,17 @@ def _build_bob_receives_steps_pqxdh(before_state: dict, after_state: dict, toolt
             ft.Text("5) Recompute AD", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("IK_A_pub", _last_key_chars(ik_a_public), width=220, full_value=ik_a_public, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
-                    _flow_node("IK_B_pub", _last_key_chars(ik_b_public), width=220, full_value=ik_b_public, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
+                    shared_steps.var_node("IK_A_pub", shared_steps.last_key_chars(ik_a_public), width=220, full_value=ik_a_public, tooltip=_tt("x3dh_step_key_ik_pub")),
+                    shared_steps.var_node("IK_B_pub", shared_steps.last_key_chars(ik_b_public), width=220, full_value=ik_b_public, tooltip=_tt("x3dh_step_key_ik_pub")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("CALC_AD", "AD = EncodeEC(IKA) || EncodeEC(IKB)", width=460, circle=True, tooltip=tooltips.get("x3dh_step_node_calc_ad", "")),
+            shared_steps.func_node("CALC_AD", "AD = EncodeEC(IKA) || EncodeEC(IKB)", width=460, tooltip=_tt("x3dh_step_node_calc_ad")),
             ft.Text("↓", size=24),
-            _flow_node("AD_local", _last_key_chars(result.get("ad_local", "-")), width=460, full_value=result.get("ad_local"), tooltip=tooltips.get("x3dh_step_key_ad", "")),
+            shared_steps.var_node("AD_local", shared_steps.last_key_chars(result.get("ad_local", "-")), width=460, full_value=result.get("ad_local"), tooltip=_tt("x3dh_step_key_ad")),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -659,7 +641,6 @@ def _build_bob_receives_steps_pqxdh(before_state: dict, after_state: dict, toolt
         step_text="7) Bob verification summary",
         result=result,
         bob_local=bob,
-        tooltips=tooltips,
         result_rows_builder=x3dh_steps._bob_receive_result_rows,
         local_rows_builder=x3dh_steps._alice_local_rows,
     )
@@ -675,7 +656,7 @@ def _build_bob_receives_steps_pqxdh(before_state: dict, after_state: dict, toolt
     ]
 
 
-def _build_generate_alice_keys_steps_pqxdh(before_state: dict, after_state: dict, tooltips: dict[str, str]) -> list[dict[str, Any]]:
+def _build_generate_alice_keys_steps_pqxdh(before_state: dict, after_state: dict) -> list[dict[str, Any]]:
     before_server = before_state.get("server_state") if isinstance(before_state.get("server_state"), dict) else {}
     before_alice = before_state.get("alice_local") if isinstance(before_state.get("alice_local"), dict) else None
     after_alice = after_state.get("alice_local") if isinstance(after_state.get("alice_local"), dict) else {}
@@ -708,8 +689,8 @@ def _build_generate_alice_keys_steps_pqxdh(before_state: dict, after_state: dict
     first_pq_opk_priv = first_pq_opk_priv_entry.get("private", "-")
 
     common_steps = shared_steps.build_generate_alice_core_steps(
-        before_alice_rows=_alice_local_rows_with_pq(before_alice, tooltips),
-        before_server_rows=_server_alice_rows_with_pq(before_server, tooltips),
+        before_alice_rows=_alice_local_rows_with_pq(before_alice),
+        before_server_rows=_server_alice_rows_with_pq(before_server),
         before_alice_panel_title="Alice local state (before)",
         before_server_panel_title="Server state (before)",
         pre_state_text="1) Show server and Alice state before generation",
@@ -726,18 +707,18 @@ def _build_generate_alice_keys_steps_pqxdh(before_state: dict, after_state: dict
         sign_output_label="Sig_SPK",
         opk_id_label="ID_EC",
         opk_id_value="IdEC(OPK_i)",
-        tooltips=tooltips,
+        tooltips={**get_tooltip_messages("x3dh"), **get_tooltip_messages("pqxdh")},
     )
 
     step6 = ft.Column(
         controls=[
             ft.Text("6) Generate Last-Resort PQKEM Prekey (PQSPK)", weight="bold"),
-            _flow_node("GENERATE_PQKEM", circle=True, width=220, tooltip=tooltips.get("pqxdh_step_node_generate_pqkem", "")),
+            shared_steps.func_node("GENERATE_PQKEM", width=220, tooltip=_tt("pqxdh_step_node_generate_pqkem")),
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    _flow_node("PQSPK_pub", _last_key_chars(pq_spk_pub), width=260, full_value=pq_spk_pub, tooltip=tooltips.get("pqxdh_step_key_pqspk_pub", "")),
-                    _flow_node("PQSPK_priv", _last_key_chars(pq_spk_priv), width=260, full_value=pq_spk_priv, tooltip=tooltips.get("pqxdh_step_key_pqspk_priv", "")),
+                    shared_steps.var_node("PQSPK_pub", shared_steps.last_key_chars(pq_spk_pub), width=260, full_value=pq_spk_pub, tooltip=_tt("pqxdh_step_key_pqspk_pub")),
+                    shared_steps.var_node("PQSPK_priv", shared_steps.last_key_chars(pq_spk_priv), width=260, full_value=pq_spk_priv, tooltip=_tt("pqxdh_step_key_pqspk_priv")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=20,
@@ -752,17 +733,17 @@ def _build_generate_alice_keys_steps_pqxdh(before_state: dict, after_state: dict
             ft.Text("7) Sign PQSPK_pub with IK_priv", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("IK_priv", _last_key_chars(after_identity.get("private", "-")), width=240, full_value=after_identity.get("private"), tooltip=tooltips.get("x3dh_step_key_ik_priv", "")),
-                    _flow_node("PQSPK_pub", _last_key_chars(pq_spk_pub), width=240, full_value=pq_spk_pub, tooltip=tooltips.get("pqxdh_step_key_pqspk_pub", "")),
+                    shared_steps.var_node("IK_priv", shared_steps.last_key_chars(after_identity.get("private", "-")), width=240, full_value=after_identity.get("private"), tooltip=_tt("x3dh_step_key_ik_priv")),
+                    shared_steps.var_node("PQSPK_pub", shared_steps.last_key_chars(pq_spk_pub), width=240, full_value=pq_spk_pub, tooltip=_tt("pqxdh_step_key_pqspk_pub")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=20,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("SIGN", circle=True, width=200, tooltip=tooltips.get("x3dh_step_node_sign", "")),
+            shared_steps.func_node("SIGN", width=200, tooltip=_tt("x3dh_step_node_sign")),
             ft.Text("↓", size=24),
-            _flow_node("Sig_PQSPK", _last_key_chars(pqspk_signature), width=420, full_value=pqspk_signature, tooltip=tooltips.get("pqxdh_step_key_pqspk_sig", "")),
+            shared_steps.var_node("Sig_PQSPK", shared_steps.last_key_chars(pqspk_signature), width=420, full_value=pqspk_signature, tooltip=_tt("pqxdh_step_key_pqspk_sig")),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -776,20 +757,20 @@ def _build_generate_alice_keys_steps_pqxdh(before_state: dict, after_state: dict
                 padding=12,
                 content=ft.Column(
                     controls=[
-                        _flow_node("GENERATE_PQKEM", circle=True, width=220, height=70, tooltip=tooltips.get("pqxdh_step_node_generate_pqkem", "")),
+                        shared_steps.func_node("GENERATE_PQKEM", width=220, height=70, tooltip=_tt("pqxdh_step_node_generate_pqkem")),
                         ft.Text("↓", size=22),
                         ft.Row(
                             controls=[
-                                _flow_node("PQOPK_pub", _last_key_chars(first_pq_opk_pub), width=240, height=80, full_value=first_pq_opk_pub, tooltip=tooltips.get("pqxdh_step_key_pqopk_pub", "")),
-                                _flow_node("PQOPK_priv", _last_key_chars(first_pq_opk_priv), width=240, height=80, full_value=first_pq_opk_priv, tooltip=tooltips.get("pqxdh_step_key_pqopk_priv", "")),
+                                shared_steps.var_node("PQOPK_pub", shared_steps.last_key_chars(first_pq_opk_pub), width=240, height=80, full_value=first_pq_opk_pub, tooltip=_tt("pqxdh_step_key_pqopk_pub")),
+                                shared_steps.var_node("PQOPK_priv", shared_steps.last_key_chars(first_pq_opk_priv), width=240, height=80, full_value=first_pq_opk_priv, tooltip=_tt("pqxdh_step_key_pqopk_priv")),
                             ],
                             alignment=ft.MainAxisAlignment.CENTER,
                             spacing=20,
                         ),
                         ft.Text("↓", size=22),
-                        _flow_node("ID_KEM", "IdKEM(PQOPK_i)", width=220, height=70, full_value=first_pq_opk_id, tooltip=tooltips.get("pqxdh_step_key_id_kem", "")),
+                        shared_steps.var_node("ID_KEM", "IdKEM(PQOPK_i)", width=220, height=70, full_value=first_pq_opk_id, tooltip=_tt("pqxdh_step_key_id_kem")),
                         ft.Text("↓", size=22),
-                        _flow_node(
+                        shared_steps.var_node(
                             "Sig_PQOPK_i",
                             "Sig(IK_priv, PQOPK_i)",
                             width=480,
@@ -817,7 +798,7 @@ def _build_generate_alice_keys_steps_pqxdh(before_state: dict, after_state: dict
         controls=[
             ft.Text("8) Generate PQOPKs and signatures", weight="bold"),
             step8_loop,
-            _flow_node("Result", f"PQOPK set generated: {pq_opk_count} keys", width=380, height=90, full_value=pq_opk_keys),
+            shared_steps.var_node("Result", f"PQOPK set generated: {pq_opk_count} keys", width=380, height=90, full_value=pq_opk_keys),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -841,7 +822,7 @@ def _find_new_shared_opk_id(before_state: dict, after_state: dict) -> str:
     return str(new_ids[0]) if new_ids else "-"
 
 
-def _build_upload_initial_bundle_steps_pqxdh(before_state: dict, after_state: dict, tooltips: dict[str, str]) -> list[dict[str, Any]]:
+def _build_upload_initial_bundle_steps_pqxdh(before_state: dict, after_state: dict) -> list[dict[str, Any]]:
     before_server = before_state.get("server_state") if isinstance(before_state.get("server_state"), dict) else {}
     after_server = after_state.get("server_state") if isinstance(after_state.get("server_state"), dict) else {}
 
@@ -850,8 +831,8 @@ def _build_upload_initial_bundle_steps_pqxdh(before_state: dict, after_state: di
             ft.Text("1) Show Alice local and server state", weight="bold"),
             ft.Row(
                 controls=[
-                    _state_panel("Alice local (before)", _alice_local_rows_with_pq(before_state.get("alice_local"), tooltips)),
-                    _state_panel("Server (before)", _server_alice_rows_with_pq(before_server, tooltips)),
+                    shared_steps.state_panel("Alice local (before)", _alice_local_rows_with_pq(before_state.get("alice_local"))),
+                    shared_steps.state_panel("Server (before)", _server_alice_rows_with_pq(before_server)),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=20,
@@ -867,18 +848,18 @@ def _build_upload_initial_bundle_steps_pqxdh(before_state: dict, after_state: di
             ft.Text("2) Upload PQXDH prekey bundle to server", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("IK_pub", "identity_dh.public", width=220, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
-                    _flow_node("SPK_pub + Sig", "signed_prekey + signature", width=220, tooltip=tooltips.get("x3dh_step_key_spk_sig", "")),
-                    _flow_node("PQSPK_pub + Sig", "pq_signed_prekey + signature", width=260, tooltip=tooltips.get("pqxdh_step_key_pqspk_sig", "")),
+                    shared_steps.var_node("IK_pub", "identity_dh.public", width=220, tooltip=_tt("x3dh_step_key_ik_pub")),
+                    shared_steps.var_node("SPK_pub + Sig", "signed_prekey + signature", width=220, tooltip=_tt("x3dh_step_key_spk_sig")),
+                    shared_steps.var_node("PQSPK_pub + Sig", "pq_signed_prekey + signature", width=260, tooltip=_tt("pqxdh_step_key_pqspk_sig")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=14,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("UPLOAD BUNDLE", circle=True, width=220, tooltip=tooltips.get("pqxdh_step_node_upload_bundle", "")),
+            shared_steps.func_node("UPLOAD BUNDLE", width=220, tooltip=_tt("pqxdh_step_node_upload_bundle")),
             ft.Text("↓", size=24),
-            _flow_node("Server alice_bundle", "IK + SPK + Sig + PQSPK + Sig", width=480, height=95, tooltip=tooltips.get("pqxdh_step_node_upload_bundle", "")),
+            shared_steps.var_node("Server alice_bundle", "IK + SPK + Sig + PQSPK + Sig", width=480, height=95, tooltip=_tt("pqxdh_step_node_upload_bundle")),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -889,20 +870,20 @@ def _build_upload_initial_bundle_steps_pqxdh(before_state: dict, after_state: di
             ft.Text("3) Upload OPK and PQOPK maps", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("OPK map", "opk_public_by_id", width=240, tooltip=tooltips.get("x3dh_step_node_upload_opk", "")),
-                    _flow_node("PQOPK map", "pq_opk_public_by_id", width=240, tooltip=tooltips.get("pqxdh_step_node_upload_opk_pair", "")),
+                    shared_steps.var_node("OPK map", "opk_public_by_id", width=240, tooltip=_tt("x3dh_step_node_upload_opk")),
+                    shared_steps.var_node("PQOPK map", "pq_opk_public_by_id", width=240, tooltip=_tt("pqxdh_step_node_upload_opk_pair")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("UPLOAD OPK SETS", circle=True, width=220, tooltip=tooltips.get("pqxdh_step_node_upload_opk_pair", "")),
+            shared_steps.func_node("UPLOAD OPK SETS", width=220, tooltip=_tt("pqxdh_step_node_upload_opk_pair")),
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    _flow_node("Server EC OPKs", "alice_available_opk_ids + map", width=300, height=95, tooltip=tooltips.get("x3dh_step_node_upload_opk", "")),
-                    _flow_node("Server PQ OPKs", "alice_pq_available_opk_ids + map", width=320, height=95, tooltip=tooltips.get("pqxdh_step_node_upload_opk_pair", "")),
+                    shared_steps.var_node("Server EC OPKs", "alice_available_opk_ids + map", width=300, height=95, tooltip=_tt("x3dh_step_node_upload_opk")),
+                    shared_steps.var_node("Server PQ OPKs", "alice_pq_available_opk_ids + map", width=320, height=95, tooltip=_tt("pqxdh_step_node_upload_opk_pair")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
@@ -918,10 +899,10 @@ def _build_upload_initial_bundle_steps_pqxdh(before_state: dict, after_state: di
             ft.Text("4) Alice and Server after upload", weight="bold"),
             ft.Row(
                 controls=[
-                    _state_panel("Alice local (after)", _alice_local_rows_with_pq(after_state.get("alice_local"), tooltips)),
-                    _state_panel(
+                    shared_steps.state_panel("Alice local (after)", _alice_local_rows_with_pq(after_state.get("alice_local"))),
+                    shared_steps.state_panel(
                         "Server (after)",
-                        _server_alice_rows_with_pq(after_server, tooltips),
+                        _server_alice_rows_with_pq(after_server),
                         highlight_labels={"SPK_pub(server)", "SPK_sig(server)", "PQSPK_pub(server)", "Sig_PQSPK(server)", "OPK_count_server", "PQOPK_count_server"},
                     ),
                 ],
@@ -942,7 +923,7 @@ def _build_upload_initial_bundle_steps_pqxdh(before_state: dict, after_state: di
     ]
 
 
-def _build_upload_new_opk_steps_pqxdh(before_state: dict, after_state: dict, tooltips: dict[str, str]) -> list[dict[str, Any]]:
+def _build_upload_new_opk_steps_pqxdh(before_state: dict, after_state: dict) -> list[dict[str, Any]]:
     before_server = before_state.get("server_state") if isinstance(before_state.get("server_state"), dict) else {}
     after_server = after_state.get("server_state") if isinstance(after_state.get("server_state"), dict) else {}
     new_opk_id = _find_new_shared_opk_id(before_state, after_state)
@@ -963,8 +944,8 @@ def _build_upload_new_opk_steps_pqxdh(before_state: dict, after_state: dict, too
             ft.Text("1) Alice current state (local + server)", weight="bold"),
             ft.Row(
                 controls=[
-                    _state_panel("Alice local (before)", _alice_local_rows_with_pq(before_state.get("alice_local"), tooltips)),
-                    _state_panel("Server (before)", _server_alice_rows_with_pq(before_server, tooltips)),
+                    shared_steps.state_panel("Alice local (before)", _alice_local_rows_with_pq(before_state.get("alice_local"))),
+                    shared_steps.state_panel("Server (before)", _server_alice_rows_with_pq(before_server)),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=20,
@@ -978,17 +959,17 @@ def _build_upload_new_opk_steps_pqxdh(before_state: dict, after_state: dict, too
     step2 = ft.Column(
         controls=[
             ft.Text("2) Generate new EC OPK key pair", weight="bold"),
-            _flow_node("GENERATE_DH", circle=True, width=200, tooltip=tooltips.get("x3dh_step_node_generate_dh", "")),
+            shared_steps.func_node("GENERATE_DH", width=200, tooltip=_tt("x3dh_step_node_generate_dh")),
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    _flow_node("OPK_pub", _last_key_chars(new_pub), width=240, full_value=new_pub, tooltip=tooltips.get("x3dh_step_key_opk_pub", "")),
-                    _flow_node("OPK_priv", _last_key_chars(new_priv), width=240, full_value=new_priv, tooltip=tooltips.get("x3dh_step_key_opk_priv", "")),
+                    shared_steps.var_node("OPK_pub", shared_steps.last_key_chars(new_pub), width=240, full_value=new_pub, tooltip=_tt("x3dh_step_key_opk_pub")),
+                    shared_steps.var_node("OPK_priv", shared_steps.last_key_chars(new_priv), width=240, full_value=new_priv, tooltip=_tt("x3dh_step_key_opk_priv")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=20,
             ),
-            _flow_node("Assigned ID", str(new_opk_id), width=220, tooltip=tooltips.get("pqxdh_step_key_id_ec", "")),
+            shared_steps.var_node("Assigned ID", str(new_opk_id), width=220, tooltip=_tt("pqxdh_step_key_id_ec")),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -997,17 +978,17 @@ def _build_upload_new_opk_steps_pqxdh(before_state: dict, after_state: dict, too
     step3 = ft.Column(
         controls=[
             ft.Text("3) Generate new PQOPK key pair", weight="bold"),
-            _flow_node("GENERATE_PQKEM", circle=True, width=220, tooltip=tooltips.get("pqxdh_step_node_generate_pqkem", "")),
+            shared_steps.func_node("GENERATE_PQKEM", width=220, tooltip=_tt("pqxdh_step_node_generate_pqkem")),
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    _flow_node("PQOPK_pub", _last_key_chars(new_pq_pub), width=240, full_value=new_pq_pub, tooltip=tooltips.get("pqxdh_step_key_pqopk_pub", "")),
-                    _flow_node("PQOPK_priv", _last_key_chars(new_pq_priv), width=240, full_value=new_pq_priv, tooltip=tooltips.get("pqxdh_step_key_pqopk_priv", "")),
+                    shared_steps.var_node("PQOPK_pub", shared_steps.last_key_chars(new_pq_pub), width=240, full_value=new_pq_pub, tooltip=_tt("pqxdh_step_key_pqopk_pub")),
+                    shared_steps.var_node("PQOPK_priv", shared_steps.last_key_chars(new_pq_priv), width=240, full_value=new_pq_priv, tooltip=_tt("pqxdh_step_key_pqopk_priv")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=20,
             ),
-            _flow_node("Shared ID", str(new_opk_id), width=220, tooltip=tooltips.get("pqxdh_step_key_id_kem", "")),
+            shared_steps.var_node("Shared ID", str(new_opk_id), width=220, tooltip=_tt("pqxdh_step_key_id_kem")),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1018,20 +999,20 @@ def _build_upload_new_opk_steps_pqxdh(before_state: dict, after_state: dict, too
             ft.Text("4) Upload new OPK/PQOPK pair to server", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("EC OPK id", str(new_opk_id), width=220, tooltip=tooltips.get("pqxdh_step_key_id_ec", "")),
-                    _flow_node("PQ OPK id", str(new_opk_id), width=220, tooltip=tooltips.get("pqxdh_step_key_id_kem", "")),
+                    shared_steps.var_node("EC OPK id", str(new_opk_id), width=220, tooltip=_tt("pqxdh_step_key_id_ec")),
+                    shared_steps.var_node("PQ OPK id", str(new_opk_id), width=220, tooltip=_tt("pqxdh_step_key_id_kem")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("UPLOAD OPK+PQOPK", circle=True, width=240, tooltip=tooltips.get("pqxdh_step_node_upload_opk_pair", "")),
+            shared_steps.func_node("UPLOAD OPK+PQOPK", width=240, tooltip=_tt("pqxdh_step_node_upload_opk_pair")),
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    _flow_node("Server EC OPKs", "alice_available_opk_ids + map", width=300, height=95, tooltip=tooltips.get("x3dh_step_node_upload_opk", "")),
-                    _flow_node("Server PQ OPKs", "alice_pq_available_opk_ids + map", width=320, height=95, tooltip=tooltips.get("pqxdh_step_node_upload_opk_pair", "")),
+                    shared_steps.var_node("Server EC OPKs", "alice_available_opk_ids + map", width=300, height=95, tooltip=_tt("x3dh_step_node_upload_opk")),
+                    shared_steps.var_node("Server PQ OPKs", "alice_pq_available_opk_ids + map", width=320, height=95, tooltip=_tt("pqxdh_step_node_upload_opk_pair")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
@@ -1047,8 +1028,8 @@ def _build_upload_new_opk_steps_pqxdh(before_state: dict, after_state: dict, too
             ft.Text("5) Finish summary", weight="bold"),
             ft.Row(
                 controls=[
-                    _state_panel("Alice local (after)", _alice_local_rows_with_pq(after_state.get("alice_local"), tooltips), highlight_labels={"OPK_count_local", "PQOPK_count_local"}),
-                    _state_panel("Server (after)", _server_alice_rows_with_pq(after_server, tooltips), highlight_labels={"OPK_count_server", "OPK_ids_server", "PQOPK_count_server", "PQOPK_ids_server"}),
+                    shared_steps.state_panel("Alice local (after)", _alice_local_rows_with_pq(after_state.get("alice_local")), highlight_labels={"OPK_count_local", "PQOPK_count_local"}),
+                    shared_steps.state_panel("Server (after)", _server_alice_rows_with_pq(after_server), highlight_labels={"OPK_count_server", "OPK_ids_server", "PQOPK_count_server", "PQOPK_ids_server"}),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=20,
@@ -1068,7 +1049,7 @@ def _build_upload_new_opk_steps_pqxdh(before_state: dict, after_state: dict, too
     ]
 
 
-def _build_upload_new_spk_steps_pqxdh(before_state: dict, after_state: dict, tooltips: dict[str, str]) -> list[dict[str, Any]]:
+def _build_upload_new_spk_steps_pqxdh(before_state: dict, after_state: dict) -> list[dict[str, Any]]:
     before_server = before_state.get("server_state") if isinstance(before_state.get("server_state"), dict) else {}
     after_server = after_state.get("server_state") if isinstance(after_state.get("server_state"), dict) else {}
     before_alice = before_state.get("alice_local") if isinstance(before_state.get("alice_local"), dict) else {}
@@ -1096,8 +1077,8 @@ def _build_upload_new_spk_steps_pqxdh(before_state: dict, after_state: dict, too
             ft.Text("1) Alice current state (local + server)", weight="bold"),
             ft.Row(
                 controls=[
-                    _state_panel("Alice local (before)", _alice_local_rows_with_pq(before_state.get("alice_local"), tooltips)),
-                    _state_panel("Server (before)", _server_alice_rows_with_pq(before_server, tooltips)),
+                    shared_steps.state_panel("Alice local (before)", _alice_local_rows_with_pq(before_state.get("alice_local"))),
+                    shared_steps.state_panel("Server (before)", _server_alice_rows_with_pq(before_server)),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=20,
@@ -1111,19 +1092,19 @@ def _build_upload_new_spk_steps_pqxdh(before_state: dict, after_state: dict, too
     step2 = ft.Column(
         controls=[
             ft.Text("2) Store old SPK/PQSPK and generate new keys", weight="bold"),
-            _flow_node(
+            shared_steps.var_node(
                 "Store old prekeys",
                 "Keep old SPK/PQSPK for delayed initial messages",
                 width=520,
                 height=95,
                 full_value=f"old SPK_pub={old_spk_pub}\\nold PQSPK_pub={old_pq_spk_pub}",
-                tooltip=tooltips.get("pqxdh_step_node_upload_spk_pqspk", ""),
+                tooltip=_tt("pqxdh_step_node_upload_spk_pqspk"),
             ),
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    _flow_node("GENERATE_DH", circle=True, width=200, tooltip=tooltips.get("x3dh_step_node_generate_dh", "")),
-                    _flow_node("GENERATE_PQKEM", circle=True, width=220, tooltip=tooltips.get("pqxdh_step_node_generate_pqkem", "")),
+                    shared_steps.func_node("GENERATE_DH", width=200, tooltip=_tt("x3dh_step_node_generate_dh")),
+                    shared_steps.func_node("GENERATE_PQKEM", width=220, tooltip=_tt("pqxdh_step_node_generate_pqkem")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
@@ -1132,10 +1113,10 @@ def _build_upload_new_spk_steps_pqxdh(before_state: dict, after_state: dict, too
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    _flow_node("SPK_pub", _last_key_chars(new_spk_pub), width=230, full_value=new_spk_pub, tooltip=tooltips.get("x3dh_step_key_spk_pub", "")),
-                    _flow_node("SPK_priv", _last_key_chars(new_spk_priv), width=230, full_value=new_spk_priv, tooltip=tooltips.get("x3dh_step_key_spk_priv", "")),
-                    _flow_node("PQSPK_pub", _last_key_chars(new_pq_spk_pub), width=230, full_value=new_pq_spk_pub, tooltip=tooltips.get("pqxdh_step_key_pqspk_pub", "")),
-                    _flow_node("PQSPK_priv", _last_key_chars(new_pq_spk_priv), width=230, full_value=new_pq_spk_priv, tooltip=tooltips.get("pqxdh_step_key_pqspk_priv", "")),
+                    shared_steps.var_node("SPK_pub", shared_steps.last_key_chars(new_spk_pub), width=230, full_value=new_spk_pub, tooltip=_tt("x3dh_step_key_spk_pub")),
+                    shared_steps.var_node("SPK_priv", shared_steps.last_key_chars(new_spk_priv), width=230, full_value=new_spk_priv, tooltip=_tt("x3dh_step_key_spk_priv")),
+                    shared_steps.var_node("PQSPK_pub", shared_steps.last_key_chars(new_pq_spk_pub), width=230, full_value=new_pq_spk_pub, tooltip=_tt("pqxdh_step_key_pqspk_pub")),
+                    shared_steps.var_node("PQSPK_priv", shared_steps.last_key_chars(new_pq_spk_priv), width=230, full_value=new_pq_spk_priv, tooltip=_tt("pqxdh_step_key_pqspk_priv")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
@@ -1151,17 +1132,17 @@ def _build_upload_new_spk_steps_pqxdh(before_state: dict, after_state: dict, too
             ft.Text("3) Sign old EC SPK with IK_priv", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("IK_priv", _last_key_chars(ik_priv), width=240, full_value=ik_priv, tooltip=tooltips.get("x3dh_step_key_ik_priv", "")),
-                    _flow_node("SPK_pub", _last_key_chars(new_spk_pub), width=240, full_value=new_spk_pub, tooltip=tooltips.get("x3dh_step_key_spk_pub", "")),
+                    shared_steps.var_node("IK_priv", shared_steps.last_key_chars(ik_priv), width=240, full_value=ik_priv, tooltip=_tt("x3dh_step_key_ik_priv")),
+                    shared_steps.var_node("SPK_pub", shared_steps.last_key_chars(new_spk_pub), width=240, full_value=new_spk_pub, tooltip=_tt("x3dh_step_key_spk_pub")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("SIGN", circle=True, width=200, tooltip=tooltips.get("x3dh_step_node_sign", "")),
+            shared_steps.func_node("SIGN", width=200, tooltip=_tt("x3dh_step_node_sign")),
             ft.Text("↓", size=24),
-            _flow_node("Sig_SPK", _last_key_chars(new_sig_spk), width=320, full_value=new_sig_spk, tooltip=tooltips.get("x3dh_step_key_spk_sig", "")),
+            shared_steps.var_node("Sig_SPK", shared_steps.last_key_chars(new_sig_spk), width=320, full_value=new_sig_spk, tooltip=_tt("x3dh_step_key_spk_sig")),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1172,17 +1153,17 @@ def _build_upload_new_spk_steps_pqxdh(before_state: dict, after_state: dict, too
             ft.Text("4) Sign new PQSPK with IK_priv", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("IK_priv", _last_key_chars(ik_priv), width=240, full_value=ik_priv, tooltip=tooltips.get("x3dh_step_key_ik_priv", "")),
-                    _flow_node("PQSPK_pub", _last_key_chars(new_pq_spk_pub), width=240, full_value=new_pq_spk_pub, tooltip=tooltips.get("pqxdh_step_key_pqspk_pub", "")),
+                    shared_steps.var_node("IK_priv", shared_steps.last_key_chars(ik_priv), width=240, full_value=ik_priv, tooltip=_tt("x3dh_step_key_ik_priv")),
+                    shared_steps.var_node("PQSPK_pub", shared_steps.last_key_chars(new_pq_spk_pub), width=240, full_value=new_pq_spk_pub, tooltip=_tt("pqxdh_step_key_pqspk_pub")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("SIGN", circle=True, width=200, tooltip=tooltips.get("x3dh_step_node_sign", "")),
+            shared_steps.func_node("SIGN", width=200, tooltip=_tt("x3dh_step_node_sign")),
             ft.Text("↓", size=24),
-            _flow_node("Sig_PQSPK", _last_key_chars(new_sig_pq), width=320, full_value=new_sig_pq, tooltip=tooltips.get("pqxdh_step_key_pqspk_sig", "")),
+            shared_steps.var_node("Sig_PQSPK", shared_steps.last_key_chars(new_sig_pq), width=320, full_value=new_sig_pq, tooltip=_tt("pqxdh_step_key_pqspk_sig")),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1191,11 +1172,11 @@ def _build_upload_new_spk_steps_pqxdh(before_state: dict, after_state: dict, too
     step5 = ft.Column(
         controls=[
             ft.Text("5) Upload new EC+PQ signed prekey bundle", weight="bold"),
-            _flow_node("Bundle", "IK_pub + SPK_pub + Sig + PQSPK_pub + Sig", width=520, height=95, tooltip=tooltips.get("pqxdh_step_node_upload_bundle", "")),
+            shared_steps.var_node("Bundle", "IK_pub + SPK_pub + Sig + PQSPK_pub + Sig", width=520, height=95, tooltip=_tt("pqxdh_step_node_upload_bundle")),
             ft.Text("↓", size=24),
-            _flow_node("UPLOAD SPK+PQSPK", circle=True, width=260, tooltip=tooltips.get("pqxdh_step_node_upload_spk_pqspk", "")),
+            shared_steps.func_node("UPLOAD SPK+PQSPK", width=260, tooltip=_tt("pqxdh_step_node_upload_spk_pqspk")),
             ft.Text("↓", size=24),
-            _flow_node("Server alice_bundle", "signed_prekey and pq_signed_prekey fields replaced", width=560, height=95, tooltip=tooltips.get("pqxdh_step_node_upload_bundle", "")),
+            shared_steps.var_node("Server alice_bundle", "signed_prekey and pq_signed_prekey fields replaced", width=560, height=95, tooltip=_tt("pqxdh_step_node_upload_bundle")),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1206,8 +1187,8 @@ def _build_upload_new_spk_steps_pqxdh(before_state: dict, after_state: dict, too
             ft.Text("6) Finish summary", weight="bold"),
             ft.Row(
                 controls=[
-                    _state_panel("Alice local (after)", _alice_local_rows_with_pq(after_state.get("alice_local"), tooltips), highlight_labels={"SPK_pub", "SPK_sig", "PQSPK_pub", "Sig_PQSPK"}),
-                    _state_panel("Server (after)", _server_alice_rows_with_pq(after_server, tooltips), highlight_labels={"SPK_pub(server)", "SPK_sig(server)", "PQSPK_pub(server)", "Sig_PQSPK(server)"}),
+                    shared_steps.state_panel("Alice local (after)", _alice_local_rows_with_pq(after_state.get("alice_local")), highlight_labels={"SPK_pub", "SPK_sig", "PQSPK_pub", "Sig_PQSPK"}),
+                    shared_steps.state_panel("Server (after)", _server_alice_rows_with_pq(after_server), highlight_labels={"SPK_pub(server)", "SPK_sig(server)", "PQSPK_pub(server)", "Sig_PQSPK(server)"}),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=20,
@@ -1248,59 +1229,55 @@ def show_pqxdh_action_step_visualization_dialog(
     after_state: dict,
     action_context: dict[str, Any] | None = None,
 ) -> None:
-    tooltips = {
-        **x3dh_steps.get_tooltip_messages("x3dh"),
-        **x3dh_steps.get_tooltip_messages("pqxdh"),
-    }
 
     if action_name == "generate_alice_registration_material":
-        steps = _build_generate_alice_keys_steps_pqxdh(before_state, after_state, tooltips)
-        shared_steps.show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
+        steps = _build_generate_alice_keys_steps_pqxdh(before_state, after_state)
+        show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
         return
 
     if action_name == "request_bob_bundle_for_alice":
-        steps = _build_request_bob_bundle_steps_pqxdh(before_state, after_state, tooltips)
-        shared_steps.show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
+        steps = _build_request_bob_bundle_steps_pqxdh(before_state, after_state)
+        show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
         return
 
     if action_name == "alice_verifies_bundle_signature":
-        steps = _build_verify_signature_steps_pqxdh(before_state, after_state, tooltips)
-        shared_steps.show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
+        steps = _build_verify_signature_steps_pqxdh(before_state, after_state)
+        show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
         return
 
     if action_name == "alice_generates_ek_and_derives_sk":
-        steps = _build_generate_ek_and_sk_steps_pqxdh(before_state, after_state, tooltips)
-        shared_steps.show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
+        steps = _build_generate_ek_and_sk_steps_pqxdh(before_state, after_state)
+        show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
         return
 
     if action_name == "alice_calculates_associated_data":
-        steps = _build_calculate_ad_steps_pqxdh(before_state, after_state, tooltips)
-        shared_steps.show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
+        steps = _build_calculate_ad_steps_pqxdh(before_state, after_state)
+        show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
         return
 
     if action_name == "alice_sends_initial_message":
-        steps = _build_send_initial_message_steps_pqxdh(before_state, after_state, tooltips, action_context)
-        shared_steps.show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
+        steps = _build_send_initial_message_steps_pqxdh(before_state, after_state, action_context)
+        show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
         return
 
     if action_name == "bob_receives_and_verifies":
-        steps = _build_bob_receives_steps_pqxdh(before_state, after_state, tooltips)
-        shared_steps.show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
+        steps = _build_bob_receives_steps_pqxdh(before_state, after_state)
+        show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
         return
 
     if action_name == "upload_alice_initial_bundle":
-        steps = _build_upload_initial_bundle_steps_pqxdh(before_state, after_state, tooltips)
-        shared_steps.show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
+        steps = _build_upload_initial_bundle_steps_pqxdh(before_state, after_state)
+        show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
         return
 
     if action_name == "alice_uploads_new_opk":
-        steps = _build_upload_new_opk_steps_pqxdh(before_state, after_state, tooltips)
-        shared_steps.show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
+        steps = _build_upload_new_opk_steps_pqxdh(before_state, after_state)
+        show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
         return
 
     if action_name == "alice_rotates_signed_prekey_bundle":
-        steps = _build_upload_new_spk_steps_pqxdh(before_state, after_state, tooltips)
-        shared_steps.show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
+        steps = _build_upload_new_spk_steps_pqxdh(before_state, after_state)
+        show_step_dialog(page, f"Step-by-step visualization: {_action_title(action_name)}", steps)
         return
 
     x3dh_steps.show_x3dh_action_step_visualization_dialog(

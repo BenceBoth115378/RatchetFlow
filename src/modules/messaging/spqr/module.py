@@ -24,7 +24,14 @@ from components.data_classes import (
     SpqrSessionState,
 )
 from modules.messaging.messaging_base_module import MessagingBaseModule, encode_nested, decode_nested
-from modules.messaging.messaging_base_view import tail_hex
+from modules.messaging.messaging_base_view import (
+    tail_hex,
+    safe_decode_bytes,
+    show_warning_dialog,
+    show_initial_bootstrap_warning,
+    build_perspective_selector,
+    build_module_layout,
+)
 from modules.messaging.spqr.key_history import (
     initialize_key_history,
     track_keys_from_send_step,
@@ -53,6 +60,7 @@ from modules.messaging.spqr.step_visualization import (
     show_spqr_step_visualization_dialog,
 )
 from modules.messaging.spqr.view import build_visual
+from modules.key_exchange.key_exchange_base_logic import alice_calculates_associated_data
 from modules.key_exchange.pqxdh.logic import (
     new_state as new_pqxdh_state,
     generate_alice_registration_material,
@@ -60,7 +68,6 @@ from modules.key_exchange.pqxdh.logic import (
     request_bob_bundle_for_alice,
     alice_verifies_bundle_signature,
     alice_generates_ek_and_derives_sk,
-    alice_calculates_associated_data,
     alice_sends_initial_message,
 )
 class SPQRModule(MessagingBaseModule):
@@ -234,7 +241,7 @@ class SPQRModule(MessagingBaseModule):
                 snapshot[field.name] = value
         return snapshot
 
-    def _state_snapshot(self, state: SpqrRatchetState) -> dict[str, Any]:
+    def _snapshot_party_state(self, state: SpqrRatchetState) -> dict[str, Any]:
         chains = state.kdfchains.get(state.epoch)
         send_ck = chains.send.CK if chains is not None and chains.send is not None else None
         recv_ck = chains.receive.CK if chains is not None and chains.receive is not None else None
@@ -256,11 +263,6 @@ class SPQRModule(MessagingBaseModule):
             return ""
         return f"epoch={header.msg.epoch}, type={header.msg.msg_type.value}, n={header.n}"
 
-    def _safe_text(self, data: bytes) -> str:
-        try:
-            return data.decode("utf-8")
-        except UnicodeDecodeError:
-            return data.hex()
 
     def _record_send_step(
         self,
@@ -286,7 +288,7 @@ class SPQRModule(MessagingBaseModule):
             "encrypt_trace": encrypt_trace,
             "header_desc": self._header_desc(header),
             "message_type": header.msg.msg_type.value,
-            "message_desc": f"plaintext={self._safe_text(plaintext)} | cipher_tail={tail_hex(cipher, 16)}",
+            "message_desc": f"plaintext={safe_decode_bytes(plaintext)} | cipher_tail={tail_hex(cipher, 16)}",
         }
 
     def _record_receive_step(
@@ -313,10 +315,10 @@ class SPQRModule(MessagingBaseModule):
             "receive_trace": receive_trace,
             "header_desc": self._header_desc(header),
             "message_type": header.msg.msg_type.value,
-            "message_desc": f"cipher_tail={tail_hex(cipher, 16)} | decrypted={self._safe_text(decrypted)}",
+            "message_desc": f"cipher_tail={tail_hex(cipher, 16)} | decrypted={safe_decode_bytes(decrypted)}",
         }
 
-    def _get_party_state(self, party: str) -> SpqrRatchetState:
+    def _get_party(self, party: str) -> SpqrRatchetState:
         key = party.lower()
         if key == "alice":
             if self.session.alice is None:
@@ -346,14 +348,14 @@ class SPQRModule(MessagingBaseModule):
         if not message_text:
             raise ValueError("Message cannot be empty")
 
-        sender_state = self._get_party_state(sender_name)
-        before = self._state_snapshot(sender_state)
+        sender_state = self._get_party(sender_name)
+        before = self._snapshot_party_state(sender_state)
         header, cipher, encrypt_trace = SCKARatchetEncrypt(
             sender_state,
             message_text.encode("utf-8"),
             self._session_ad,
         )
-        after = self._state_snapshot(sender_state)
+        after = self._snapshot_party_state(sender_state)
 
         pending_id = self._next_pending_id
         pending = {
@@ -404,15 +406,15 @@ class SPQRModule(MessagingBaseModule):
             self._complete_bob_pqxdh_bootstrap_from_header(pqxdh_header)
             was_pqxdh_bootstrapped = True
 
-        recipient_state = self._get_party_state(target)
-        before = self._state_snapshot(recipient_state)
+        recipient_state = self._get_party(target)
+        before = self._snapshot_party_state(recipient_state)
         plaintext, receive_trace = SCKARatchetDecrypt(
             recipient_state,
             pending["header"],
             pending["cipher"],
             self._session_ad,
         )
-        after = self._state_snapshot(recipient_state)
+        after = self._snapshot_party_state(recipient_state)
 
         message = SpqrMessageState(
             sender=str(pending["sender"]),
@@ -532,50 +534,6 @@ class SPQRModule(MessagingBaseModule):
 
         auto_receive_enabled = bool(auto_receive_checkbox.value)
 
-        def show_warning(message: str) -> None:
-            dialog = ft.AlertDialog(
-                modal=True,
-                title=ft.Text("Warning"),
-                content=ft.Text(message),
-                actions=[ft.TextButton("OK", on_click=lambda e: _close_dialog(dialog))],
-                actions_alignment=ft.MainAxisAlignment.END,
-            )
-            page.overlay.append(dialog)
-            dialog.open = True
-            page.update()
-
-        def _close_dialog(dialog: ft.AlertDialog) -> None:
-            dialog.open = False
-            page.update()
-
-        def show_initial_warning_with_bootstrap_option(message: str) -> None:
-            show_bootstrap_checkbox = ft.Checkbox(
-                label="Show Alice PQXDH steps after closing",
-                value=True,
-            )
-
-            def close_dialog(e):
-                dialog.open = False
-                page.update()
-                if show_bootstrap_checkbox.value and self._pending_show_alice_pqxdh_bootstrap:
-                    self._pending_show_alice_pqxdh_bootstrap = False
-                    show_alice_pqxdh_bootstrap_visualization()
-
-            dialog = ft.AlertDialog(
-                modal=True,
-                title=ft.Text("Info"),
-                content=ft.Column(
-                    controls=[ft.Text(message), show_bootstrap_checkbox],
-                    tight=True,
-                    spacing=8,
-                ),
-                actions=[ft.TextButton("OK", on_click=close_dialog)],
-                actions_alignment=ft.MainAxisAlignment.END,
-            )
-            page.overlay.append(dialog)
-            dialog.open = True
-            page.update()
-
         def _show_send_step(pending_id: int, on_close=None) -> None:
             step = self._send_steps.get(pending_id)
             if step is not None:
@@ -596,24 +554,17 @@ class SPQRModule(MessagingBaseModule):
                     on_show_pqxdh_bootstrap=_show_bound_bob_pqxdh_bootstrap,
                 )
 
-        if perspective_selector is None:
-            perspective_selector = ft.RadioGroup(
-                value=app_state.perspective,
-                content=ft.Row(
-                    controls=[
-                        ft.Radio(value="global", label="Global"),
-                        ft.Radio(value="alice", label="Alice"),
-                        ft.Radio(value="bob", label="Bob"),
-                    ],
-                    spacing=10,
-                ),
-                on_change=lambda e: _on_perspective_change(e),
-            )
-
         def _on_perspective_change(e) -> None:
             app_state.perspective = e.control.value
             refresh_view()
             page.update()
+
+        if perspective_selector is None:
+            perspective_selector = build_perspective_selector(
+                app_state,
+                _on_perspective_change,
+                [("global", "Global"), ("alice", "Alice"), ("bob", "Bob")],
+            )
 
         def _auto_receive_if_enabled() -> tuple[list[int], list[str]]:
             if not auto_receive_enabled:
@@ -646,7 +597,7 @@ class SPQRModule(MessagingBaseModule):
             page.update()
 
             if errors:
-                show_warning("Auto receive failed for: " + "; ".join(errors))
+                show_warning_dialog(page, "Auto receive failed for: " + "; ".join(errors))
 
             if send_step_visualization_checkbox.value:
                 if receive_step_visualization_checkbox.value and pending_id in processed_ids:
@@ -660,7 +611,7 @@ class SPQRModule(MessagingBaseModule):
             try:
                 pending = self.send_message("alice", alice_input.value, alice_input.hint_text or "")
             except ValueError as exc:
-                show_warning(str(exc))
+                show_warning_dialog(page, str(exc))
                 return
             alice_input.value = ""
             _handle_post_send(int(pending["id"]))
@@ -669,7 +620,7 @@ class SPQRModule(MessagingBaseModule):
             try:
                 pending = self.send_message("bob", bob_input.value, bob_input.hint_text or "")
             except ValueError as exc:
-                show_warning(str(exc))
+                show_warning_dialog(page, str(exc))
                 return
             bob_input.value = ""
             _handle_post_send(int(pending["id"]))
@@ -678,7 +629,7 @@ class SPQRModule(MessagingBaseModule):
             try:
                 self.receive_message(recipient, pending_id)
             except ValueError as exc:
-                show_warning(str(exc))
+                show_warning_dialog(page, str(exc))
                 return
             refresh_view()
             page.update()
@@ -692,7 +643,7 @@ class SPQRModule(MessagingBaseModule):
             refresh_view()
             page.update()
             if errors:
-                show_warning("Auto receive failed for: " + "; ".join(errors))
+                show_warning_dialog(page, "Auto receive failed for: " + "; ".join(errors))
             if receive_step_visualization_checkbox.value:
                 for pending_id in processed_ids:
                     _show_receive_step(pending_id)
@@ -702,7 +653,7 @@ class SPQRModule(MessagingBaseModule):
             self._sync_bootstrap_from_app_state(app_state)
             refresh_view()
             page.update()
-            show_initial_warning_with_bootstrap_option("SPQR session reset with a fresh PQXDH bootstrap.")
+            show_initial_bootstrap_warning(page, "SPQR session reset with a fresh PQXDH bootstrap.", "Show Alice PQXDH steps after closing", "Info", _on_bootstrap_viz)
 
         def show_alice_pqxdh_bootstrap_visualization() -> None:
             alice_state = self.session.alice
@@ -752,44 +703,33 @@ class SPQRModule(MessagingBaseModule):
                 on_close=None,
             )
 
+        def _on_bootstrap_viz() -> None:
+            if self._pending_show_alice_pqxdh_bootstrap:
+                self._pending_show_alice_pqxdh_bootstrap = False
+                show_alice_pqxdh_bootstrap_visualization()
+
         auto_receive_checkbox.on_change = on_auto_receive_changed
         refresh_view()
         if not self._initial_warning_shown:
-            show_initial_warning_with_bootstrap_option(
+            show_initial_bootstrap_warning(
+                page,
                 "SPQR starts from a fresh PQXDH run. Alice already completed her steps; "
-                "Bob completes PQXDH bootstrap on his first receive."
+                "Bob completes PQXDH bootstrap on his first receive.",
+                "Show Alice PQXDH steps after closing",
+                "Info",
+                _on_bootstrap_viz,
             )
             self._initial_warning_shown = True
 
-        return ft.Column(
-            controls=[
-                ft.Row(
-                    controls=[
-                        ft.Text("SPQR Simulation", size=22, weight="bold"),
-                        ft.Row(
-                            controls=[
-                                send_step_visualization_checkbox,
-                                receive_step_visualization_checkbox,
-                                auto_receive_checkbox,
-                            ],
-                            spacing=16,
-                        ),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                ft.Row(
-                    controls=[
-                        message_count,
-                        perspective_selector,
-                        ft.TextButton("Reset application", on_click=on_reset_module),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                visual_container,
-            ],
-            expand=True,
+        return build_module_layout(
+            title_text="SPQR Simulation",
+            send_step_visualization_checkbox=send_step_visualization_checkbox,
+            receive_step_visualization_checkbox=receive_step_visualization_checkbox,
+            auto_receive_checkbox=auto_receive_checkbox,
+            message_count=message_count,
+            perspective_selector=perspective_selector,
+            on_reset_module=on_reset_module,
+            visual_container=visual_container,
         )
 
 

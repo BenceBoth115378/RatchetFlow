@@ -4,17 +4,23 @@ import flet as ft
 
 from components.data_classes import DHKeyPair, ReceiveStepVisualizationSnapshot, SendStepVisualizationSnapshot
 from modules import external as ext
-from modules.base_step_visualization import to_text
-
-from modules.messaging.messaging_base_step_visualization import (
-    last_n_chars,
-    preview_value,
-    func_node,
+from modules.base_steps import (
+    flow_node,
+    normalize_step_titles,
     party_state_panel,
     show_step_dialog,
-    var_node,
-    format_x3dh_header_preview,
-    format_combined_header_preview
+    to_text,
+)
+from modules.messaging.messaging_base_steps import (
+    last_n_chars,
+    preview_value,
+    x3dh_header_preview,
+    combined_dr_header_preview,
+    compute_changed_labels,
+    build_header_split_step,
+    build_bootstrap_init_step,
+    bytes_to_display_str,
+    build_before_after_panels,
 )
 
 from modules.tooltip_helpers import get_tooltip_messages
@@ -23,69 +29,6 @@ from modules.tooltip_helpers import get_tooltip_messages
 
 
 
-def _x3dh_header_preview(x3dh_header: dict[str, Any] | None) -> str:
-    """X3DH header preview (delegates to shared base)."""
-    return format_x3dh_header_preview(x3dh_header, last_n_chars)
-
-
-def _complete_header_preview(
-    header_dh: Any,
-    header_pn: int,
-    header_n_one_based: int,
-    x3dh_header: dict[str, Any] | None,
-) -> str:
-    """Combined Double Ratchet + X3DH header preview (delegates to shared base)."""
-    return format_combined_header_preview(
-        header_dh,
-        header_pn,
-        header_n_one_based,
-        x3dh_header,
-        _x3dh_header_preview,
-        last_n_chars,
-    )
-
-
-
-
-
-
-
-
-def _flow_node(
-    label: str,
-    value: str | None = None,
-    circle: bool = False,
-    width: int = 170,
-    height: int = 90,
-    tooltip: str | None = None,
-    full_value: Any = None,
-    bgcolor: str | None = None,
-    text_color: str | None = None,
-    border_color: str | None = None,
-) -> ft.Control:
-    """Build a node via shared var/function base primitives."""
-    if circle:
-        return func_node(
-            label=label,
-            width=width,
-            height=height,
-            tooltip=tooltip,
-            full_value=full_value,
-            bgcolor=bgcolor,
-            text_color=text_color,
-            border_color=border_color,
-        )
-    return var_node(
-        label=label,
-        value=value,
-        width=width,
-        height=height,
-        tooltip=tooltip,
-        full_value=full_value,
-        bgcolor=bgcolor,
-        text_color=text_color,
-        border_color=border_color,
-    )
 
 
 
@@ -98,19 +41,9 @@ def show_sending_step_visualization_dialog(
 ) -> None:
     tooltips = get_tooltip_messages("double_ratchet")
 
-    flow_node = _flow_node
-
     sender = step_data.sender
     receiver = step_data.receiver
-    plaintext_raw = step_data.plaintext
-    if isinstance(plaintext_raw, bytes):
-        try:
-            plaintext_string = plaintext_raw.decode("utf-8")
-        except UnicodeDecodeError:
-            plaintext_string = plaintext_raw.hex()
-    else:
-        plaintext_string = str(plaintext_raw)
-
+    plaintext_string = bytes_to_display_str(step_data.plaintext)
     plaintext = preview_value(plaintext_string, limit=40)
     cipher_full = step_data.cipher
     mk_full = step_data.mk
@@ -138,7 +71,6 @@ def show_sending_step_visualization_dialog(
         f"pn={step_data.header.pn}, n={step_data.header.n + 1}"
     )
     x3dh_header_full = step_data.x3dh_header if isinstance(step_data.x3dh_header, dict) else None
-    x3dh_header_preview = _x3dh_header_preview(x3dh_header_full) if x3dh_header_full is not None else ""
     combined_header_full = {
         "header": {
             "dh": header_dh_full,
@@ -147,7 +79,7 @@ def show_sending_step_visualization_dialog(
         },
         "x3dh_header": x3dh_header_full,
     } if x3dh_header_full is not None else None
-    combined_header_preview = _complete_header_preview(
+    combined_header_preview = combined_dr_header_preview(
         header_dh_full,
         step_data.header.pn,
         step_data.header.n + 1,
@@ -160,7 +92,7 @@ def show_sending_step_visualization_dialog(
 
     step1_data_flow = ft.Column(
         controls=[
-            ft.Text("1) Data and party state", weight="bold"),
+            ft.Text("Data and party state", weight="bold"),
             ft.Row(
                 controls=[
                     flow_node(
@@ -191,15 +123,15 @@ def show_sending_step_visualization_dialog(
 
     step2_data_flow = ft.Column(
         controls=[
-            ft.Text("2) Send chain step", weight="bold"),
-            flow_node("CKs", before_cks, tooltip=tooltips.get("step_viz_send_chain_cks", ""), full_value=before_cks_full),
+            ft.Text("Send chain step", weight="bold"),
+            flow_node("CKs", before_cks, width=170, tooltip=tooltips.get("step_viz_send_chain_cks", ""), full_value=before_cks_full),
             ft.Text("↓", size=24),
-            flow_node("KDF_CK", circle=True, tooltip=tooltips.get("step_viz_kdf_ck", "")),
+            flow_node("KDF_CK", circle=True, width=170, tooltip=tooltips.get("step_viz_kdf_ck", "")),
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    flow_node("new CKs", after_cks, tooltip=tooltips.get("step_viz_new_cks", ""), full_value=after_cks_full),
-                    flow_node("message key", mk, tooltip=tooltips.get("step_viz_message_key", ""), full_value=mk_full),
+                    flow_node("new CKs", after_cks, width=170, tooltip=tooltips.get("step_viz_new_cks", ""), full_value=after_cks_full),
+                    flow_node("message key", mk, width=170, tooltip=tooltips.get("step_viz_message_key", ""), full_value=mk_full),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 vertical_alignment=ft.CrossAxisAlignment.START,
@@ -223,20 +155,20 @@ def show_sending_step_visualization_dialog(
 
     step4_data_flow = ft.Column(
         controls=[
-            ft.Text("4) Encrypt plaintext", weight="bold"),
+            ft.Text("Encrypt plaintext", weight="bold"),
             ft.Row(
                 controls=[
-                    flow_node("mk", mk, tooltip=tooltips.get("step_viz_encrypt_mk", ""), full_value=mk_full),
-                    flow_node("Plaintext", plaintext, tooltip=tooltips.get("step_viz_encrypt_plaintext", "")),
-                    flow_node("AD||header", tooltip=tooltips.get("step_viz_ad_header", "")),
+                    flow_node("mk", mk, width=170, tooltip=tooltips.get("step_viz_encrypt_mk", ""), full_value=mk_full),
+                    flow_node("Plaintext", plaintext, width=170, tooltip=tooltips.get("step_viz_encrypt_plaintext", "")),
+                    flow_node("AD||header", width=170, tooltip=tooltips.get("step_viz_ad_header", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=24,
             ),
             ft.Text("↓", size=24),
-            flow_node("ENCRYPT", circle=True, tooltip=tooltips.get("step_viz_encrypt_fn", "")),
+            flow_node("ENCRYPT", circle=True, width=170, tooltip=tooltips.get("step_viz_encrypt_fn", "")),
             ft.Text("↓", size=24),
-            flow_node("Ciphertext", cipher, tooltip=tooltips.get("step_viz_ciphertext", ""), full_value=cipher_full),
+            flow_node("Ciphertext", cipher, width=170, tooltip=tooltips.get("step_viz_ciphertext", ""), full_value=cipher_full),
         ],
         spacing=6,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -246,12 +178,12 @@ def show_sending_step_visualization_dialog(
     if x3dh_header_full is not None:
         step4_x3dh_header_merge = ft.Column(
             controls=[
-                ft.Text("4) Add X3DH header data", weight="bold"),
+                ft.Text("Add X3DH header data", weight="bold"),
                 ft.Row(
                     controls=[
                         flow_node(
                             "X3DH header",
-                            x3dh_header_preview,
+                            x3dh_header_preview(x3dh_header_full),
                             width=420,
                             full_value=x3dh_header_full,
                             tooltip=tooltips.get("step_viz_x3dh_header_input", ""),
@@ -295,18 +227,18 @@ def show_sending_step_visualization_dialog(
 
     step3_data_flow = ft.Column(
         controls=[
-            ft.Text("3) Create header and update state", weight="bold"),
+            ft.Text("Create header and update state", weight="bold"),
             ft.Row(
                 controls=[
-                    flow_node("DHs_pub", before_dhs_pub, tooltip=tooltips.get("step_viz_header_dhs", ""), full_value=before_dhs_pub_full),
-                    flow_node("PN", str(before_pn), tooltip=tooltips.get("step_viz_header_pn", "")),
-                    flow_node("N", str(before_ns + 1), tooltip=tooltips.get("step_viz_header_n", "")),
+                    flow_node("DHs_pub", before_dhs_pub, width=170, tooltip=tooltips.get("step_viz_header_dhs", ""), full_value=before_dhs_pub_full),
+                    flow_node("PN", str(before_pn), width=170, tooltip=tooltips.get("step_viz_header_pn", "")),
+                    flow_node("N", str(before_ns + 1), width=170, tooltip=tooltips.get("step_viz_header_n", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
             ),
             ft.Text("↓", size=24),
-            flow_node("HEADER", circle=True, tooltip=tooltips.get("step_viz_header_fn", "")),
+            flow_node("HEADER", circle=True, width=170, tooltip=tooltips.get("step_viz_header_fn", "")),
             ft.Text("↓", size=24),
             flow_node("Header", header_preview, width=360, tooltip=tooltips.get("step_viz_header_output", ""), full_value=f"dh={to_text(header_dh_full)}, pn={step_data.header.pn}, n={step_data.header.n + 1}"),
         ],
@@ -328,17 +260,11 @@ def show_sending_step_visualization_dialog(
         ("Ns", str(after_ns), tooltips.get("step_viz_sent_after_ns", ""), None),
         ("CKs", after_cks, tooltips.get("step_viz_sent_after_cks", ""), after_cks_full),
     ]
-    step5_before_values = {label: value for label, value, _, _ in step5_before_rows}
-    step5_after_values = {label: value for label, value, _, _ in step5_after_rows}
-    changed_step5_labels = {
-        label
-        for label, value in step5_before_values.items()
-        if value != step5_after_values.get(label)
-    }
+    changed_step5_labels = compute_changed_labels(step5_before_rows, step5_after_rows)
 
     step5_data_flow = ft.Column(
         controls=[
-            ft.Text("5) Sent", weight="bold"),
+            ft.Text("Sent", weight="bold"),
             ft.Row(
                 controls=[
                     flow_node(
@@ -351,23 +277,10 @@ def show_sending_step_visualization_dialog(
                 alignment=ft.MainAxisAlignment.CENTER,
             ),
             ft.Divider(height=1),
-            ft.Row(
-                controls=[
-                    party_state_panel(
-                        "Party state before send",
-                        step5_before_rows,
-                        highlight_labels=changed_step5_labels,
-                    ),
-                    party_state_panel(
-                        "Party state after send",
-                        step5_after_rows,
-                        highlight_labels=changed_step5_labels,
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                vertical_alignment=ft.CrossAxisAlignment.START,
-                spacing=20,
-                wrap=True,
+            build_before_after_panels(
+                "Party state before send", step5_before_rows,
+                "Party state after send", step5_after_rows,
+                highlight_labels=changed_step5_labels,
             ),
         ],
         spacing=6,
@@ -375,56 +288,15 @@ def show_sending_step_visualization_dialog(
     )
 
     steps = [
-        {
-            "title": "1) Data and party state",
-            "control": step1_data_flow,
-        },
-        {
-            "title": "2) Send chain step",
-            "control": step2_data_flow,
-        },
-        {
-            "title": "3) Create header and update state",
-            "control": step3_data_flow,
-        },
+        {"title": "Data and party state", "control": step1_data_flow},
+        {"title": "Send chain step", "control": step2_data_flow},
+        {"title": "Create header and update state", "control": step3_data_flow},
     ]
-
     if step4_x3dh_header_merge is not None:
-        steps.append(
-            {
-                "title": "4) Add X3DH header data",
-                "control": step4_x3dh_header_merge,
-            }
-        )
-        step4_data_flow.controls[0].value = "5) Encrypt plaintext"
-        steps.append(
-            {
-                "title": "5) Encrypt plaintext",
-                "control": step4_data_flow,
-            }
-        )
-        step5_data_flow.controls[0].value = "6) Sent"
-        steps.append(
-            {
-                "title": "6) Sent",
-                "control": step5_data_flow,
-            }
-        )
-    else:
-        steps.append(
-            {
-                "title": "4) Encrypt plaintext",
-                "control": step4_data_flow,
-            }
-        )
-        step5_data_flow.controls[0].value = "5) Sent"
-        steps.append(
-            {
-                "title": "5) Sent",
-                "control": step5_data_flow,
-            }
-        )
-
+        steps.append({"title": "Add X3DH header data", "control": step4_x3dh_header_merge})
+    steps.append({"title": "Encrypt plaintext", "control": step4_data_flow})
+    steps.append({"title": "Sent", "control": step5_data_flow})
+    normalize_step_titles(steps)
     show_step_dialog(page, "Step-by-step visualization of sending steps", steps, on_close=on_close)
 
 
@@ -435,22 +307,11 @@ def show_receiving_step_visualization_dialog(
 ) -> None:
     tooltips = get_tooltip_messages("double_ratchet")
 
-    flow_node = _flow_node
-
     sender = step_data.sender
     receiver = step_data.receiver
-    decrypted_full = step_data.decrypted
     cipher_full = step_data.cipher
     header_dh_full = step_data.header.dh
-
-    if isinstance(decrypted_full, bytes):
-        try:
-            decrypted_string = decrypted_full.decode("utf-8")
-        except UnicodeDecodeError:
-            decrypted_string = decrypted_full.hex()
-    else:
-        decrypted_string = str(decrypted_full)
-
+    decrypted_string = bytes_to_display_str(step_data.decrypted)
     plaintext = preview_value(decrypted_string, limit=40)
     cipher = last_n_chars(cipher_full, 8)
     header_preview = (
@@ -461,7 +322,7 @@ def show_receiving_step_visualization_dialog(
     mk = last_n_chars(mk_full, 8)
 
     combined_header_full = None
-    combined_header_preview = _complete_header_preview(
+    combined_header_preview = combined_dr_header_preview(
         header_dh_full,
         step_data.header.pn,
         step_data.header.n + 1,
@@ -476,7 +337,7 @@ def show_receiving_step_visualization_dialog(
             },
             "x3dh_header": step_data.x3dh_header,
         }
-        combined_header_preview = _complete_header_preview(
+        combined_header_preview = combined_dr_header_preview(
             header_dh_full,
             step_data.header.pn,
             step_data.header.n + 1,
@@ -646,9 +507,9 @@ def show_receiving_step_visualization_dialog(
     header_processing_data_flow = ft.Column(
         controls=[
             ft.Text("Header processing", weight="bold"),
-            flow_node("Header.dh", last_n_chars(header_dh_full, 8), tooltip=tooltips.get("step_viz_receive_header_dh", ""), full_value=header_dh_full),
+            flow_node("Header.dh", last_n_chars(header_dh_full, 8), width=170, tooltip=tooltips.get("step_viz_receive_header_dh", ""), full_value=header_dh_full),
             ft.Text("↓", size=24),
-            flow_node("Compare with DHr", f"DHr: {before_dhr}", circle=True, tooltip=tooltips.get("step_viz_receive_compare_dh", ""), full_value=before_dhr_full),
+            flow_node("Compare with DHr", f"DHr: {before_dhr}", circle=True, width=170, tooltip=tooltips.get("step_viz_receive_compare_dh", ""), full_value=before_dhr_full),
             ft.Text("↓", size=24),
             flow_node(
                 "Ratchet decision",
@@ -701,18 +562,20 @@ def show_receiving_step_visualization_dialog(
             flow_node(
                 "CKr",
                 ckr_before_kdf_ck,
+                width=170,
                 tooltip=tooltips.get("step_viz_receive_ckr", ""),
                 full_value=ckr_before_kdf_ck_full,
             ),
             ft.Text("↓", size=24),
-            flow_node("KDF_CK", circle=True, tooltip=tooltips.get("step_viz_receive_kdf_ck", "")),
+            flow_node("KDF_CK", circle=True, width=170, tooltip=tooltips.get("step_viz_receive_kdf_ck", "")),
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    flow_node("new CKr", after_ckr, tooltip=tooltips.get("step_viz_receive_new_ckr", ""), full_value=after_ckr_full),
+                    flow_node("new CKr", after_ckr, width=170, tooltip=tooltips.get("step_viz_receive_new_ckr", ""), full_value=after_ckr_full),
                     flow_node(
                         "message key",
                         mk,
+                        width=170,
                         tooltip=tooltips.get("step_viz_receive_message_key", ""),
                         full_value=mk_full,
                     ),
@@ -730,8 +593,8 @@ def show_receiving_step_visualization_dialog(
             ft.Text("DH ratchet update (part 1)", weight="bold"),
             ft.Row(
                 controls=[
-                    flow_node("Header.dh", last_n_chars(header_dh_full, 8), tooltip=tooltips.get("step_viz_receive_header_dh", ""), full_value=header_dh_full),
-                    flow_node("Current DHr", before_dhr, tooltip=tooltips.get("step_viz_receive_compare_dh", ""), full_value=before_dhr_full),
+                    flow_node("Header.dh", last_n_chars(header_dh_full, 8), width=170, tooltip=tooltips.get("step_viz_receive_header_dh", ""), full_value=header_dh_full),
+                    flow_node("Current DHr", before_dhr, width=170, tooltip=tooltips.get("step_viz_receive_compare_dh", ""), full_value=before_dhr_full),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
@@ -823,8 +686,8 @@ def show_receiving_step_visualization_dialog(
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    flow_node("RK", rk_after_kdf_rk1, tooltip=tooltips.get("step_viz_receive_after_rk", ""), full_value=rk_after_kdf_rk1_full),
-                    flow_node("CKr", ckr_after_double_ratchet, tooltip=tooltips.get("step_viz_receive_after_ckr", ""), full_value=ckr_after_double_ratchet_full),
+                    flow_node("RK", rk_after_kdf_rk1, width=170, tooltip=tooltips.get("step_viz_receive_after_rk", ""), full_value=rk_after_kdf_rk1_full),
+                    flow_node("CKr", ckr_after_double_ratchet, width=170, tooltip=tooltips.get("step_viz_receive_after_ckr", ""), full_value=ckr_after_double_ratchet_full),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
@@ -931,41 +794,31 @@ def show_receiving_step_visualization_dialog(
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    flow_node("RK", after_rk, tooltip=tooltips.get("step_viz_receive_after_rk", ""), full_value=after_rk_full),
-                    flow_node("CKs", after_cks, tooltip=tooltips.get("step_viz_receive_dh_ratchet_after_cks", ""), full_value=after_cks_full),
+                    flow_node("RK", after_rk, width=170, tooltip=tooltips.get("step_viz_receive_after_rk", ""), full_value=after_rk_full),
+                    flow_node("CKs", after_cks, width=170, tooltip=tooltips.get("step_viz_receive_dh_ratchet_after_cks", ""), full_value=after_cks_full),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
             ),
             ft.Divider(height=1),
-            ft.Row(
-                controls=[
-                    party_state_panel(
-                        "Receiver state before part 3",
-                        [
-                            ("DHr", after_dhr, tooltips.get("step_viz_receive_after_dhr", ""), after_dhr_full),
-                            ("DHs_pub", after_dhs_pub, tooltips.get("DHs_pub", ""), after_dhs_pub_full),
-                            ("RK", rk_after_kdf_rk1, tooltips.get("step_viz_receive_after_rk", ""), rk_after_kdf_rk1_full),
-                            ("CKr", ckr_after_double_ratchet, tooltips.get("step_viz_receive_after_ckr", ""), ckr_after_double_ratchet_full),
-                            ("Nr", "0", tooltips.get("step_viz_receive_set_nr_zero", ""), None),
-                        ],
-                    ),
-                    party_state_panel(
-                        "Receiver state after part 3",
-                        [
-                            ("DHr", after_dhr, tooltips.get("step_viz_receive_after_dhr", ""), after_dhr_full),
-                            ("DHs_pub", after_dhs_pub, tooltips.get("DHs_pub", ""), after_dhs_pub_full),
-                            ("RK", after_rk, tooltips.get("step_viz_receive_after_rk", ""), after_rk_full),
-                            ("CKs", after_cks, tooltips.get("step_viz_receive_dh_ratchet_after_cks", ""), after_cks_full),
-                            ("Ns", "0", tooltips.get("step_viz_receive_dh_ratchet_after_ns", ""), None),
-                        ],
-                        highlight_labels={"RK", "CKs", "Ns"},
-                    ),
+            build_before_after_panels(
+                "Receiver state before part 3",
+                [
+                    ("DHr", after_dhr, tooltips.get("step_viz_receive_after_dhr", ""), after_dhr_full),
+                    ("DHs_pub", after_dhs_pub, tooltips.get("DHs_pub", ""), after_dhs_pub_full),
+                    ("RK", rk_after_kdf_rk1, tooltips.get("step_viz_receive_after_rk", ""), rk_after_kdf_rk1_full),
+                    ("CKr", ckr_after_double_ratchet, tooltips.get("step_viz_receive_after_ckr", ""), ckr_after_double_ratchet_full),
+                    ("Nr", "0", tooltips.get("step_viz_receive_set_nr_zero", ""), None),
                 ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                vertical_alignment=ft.CrossAxisAlignment.START,
-                spacing=20,
-                wrap=True,
+                "Receiver state after part 3",
+                [
+                    ("DHr", after_dhr, tooltips.get("step_viz_receive_after_dhr", ""), after_dhr_full),
+                    ("DHs_pub", after_dhs_pub, tooltips.get("DHs_pub", ""), after_dhs_pub_full),
+                    ("RK", after_rk, tooltips.get("step_viz_receive_after_rk", ""), after_rk_full),
+                    ("CKs", after_cks, tooltips.get("step_viz_receive_dh_ratchet_after_cks", ""), after_cks_full),
+                    ("Ns", "0", tooltips.get("step_viz_receive_dh_ratchet_after_ns", ""), None),
+                ],
+                after_highlight_labels={"RK", "CKs", "Ns"},
             ),
         ],
         spacing=6,
@@ -980,17 +833,18 @@ def show_receiving_step_visualization_dialog(
                     flow_node(
                         "MK",
                         mk,
+                        width=170,
                         tooltip=tooltips.get("step_viz_receive_message_key", ""),
                         full_value=mk_full,
                     ),
-                    flow_node("Ciphertext", cipher, tooltip=tooltips.get("step_viz_receive_decrypt_cipher", ""), full_value=cipher_full),
-                    flow_node("AD||header", tooltip=tooltips.get("step_viz_receive_decrypt_ad", "")),
+                    flow_node("Ciphertext", cipher, width=170, tooltip=tooltips.get("step_viz_receive_decrypt_cipher", ""), full_value=cipher_full),
+                    flow_node("AD||header", width=170, tooltip=tooltips.get("step_viz_receive_decrypt_ad", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=24,
             ),
             ft.Text("↓", size=24),
-            flow_node("DECRYPT", circle=True, tooltip=tooltips.get("step_viz_receive_decrypt_fn", "")),
+            flow_node("DECRYPT", circle=True, width=170, tooltip=tooltips.get("step_viz_receive_decrypt_fn", "")),
             ft.Text("↓", size=24),
             flow_node("Plaintext", plaintext, width=280, tooltip=tooltips.get("step_viz_receive_plaintext", ""), full_value=decrypted_string),
         ],
@@ -1014,13 +868,7 @@ def show_receiving_step_visualization_dialog(
         ("CKr", after_ckr, tooltips.get("step_viz_receive_after_ckr", ""), after_ckr_full),
         ("Nr", str(after_nr), tooltips.get("step_viz_receive_after_nr", ""), None),
     ]
-    before_values = {label: value for label, value, _, _ in before_rows}
-    after_values = {label: value for label, value, _, _ in after_rows}
-    changed_labels = {
-        label
-        for label, value in before_values.items()
-        if value != after_values.get(label)
-    }
+    changed_labels = compute_changed_labels(before_rows, after_rows)
 
     received_summary_data_flow = ft.Column(
         controls=[
@@ -1037,146 +885,15 @@ def show_receiving_step_visualization_dialog(
                 alignment=ft.MainAxisAlignment.CENTER,
             ),
             ft.Divider(height=1),
-            ft.Row(
-                controls=[
-                    party_state_panel(
-                        "Receiver state before",
-                        before_rows,
-                        highlight_labels=changed_labels,
-                    ),
-                    party_state_panel(
-                        "Receiver state after",
-                        after_rows,
-                        highlight_labels=changed_labels,
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                vertical_alignment=ft.CrossAxisAlignment.START,
-                spacing=20,
-                wrap=True,
+            build_before_after_panels(
+                "Receiver state before", before_rows,
+                "Receiver state after", after_rows,
+                highlight_labels=changed_labels,
             ),
         ],
         spacing=6,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
     )
-
-    header_split_data_flow = None
-    if step_data.x3dh_header is not None:
-        header_split_controls: list[ft.Control] = [
-            ft.Text("Header split (X3DH metadata extraction)", weight="bold"),
-            flow_node(
-                "Complete header",
-                combined_header_preview,
-                width=460,
-                full_value=combined_header_full,
-                tooltip=tooltips.get("step_viz_header_split_complete", ""),
-            ),
-            ft.Text("↓", size=24),
-            flow_node(
-                "SPLIT",
-                "",
-                width=200,
-                height=70,
-                circle=True,
-                tooltip=tooltips.get("step_viz_header_split_fn", ""),
-            ),
-            ft.Text("↓", size=24),
-            ft.Row(
-                controls=[
-                    flow_node(
-                        "Message header",
-                        f"(dh, pn, n)={header_preview}",
-                        width=240,
-                        full_value={
-                            "dh": header_dh_full,
-                            "pn": step_data.header.pn,
-                            "n": step_data.header.n + 1,
-                        },
-                        tooltip=tooltips.get("step_viz_header_split_base", ""),
-                    ),
-                    flow_node(
-                        "X3DH header",
-                        _x3dh_header_preview(step_data.x3dh_header),
-                        width=420,
-                        full_value=step_data.x3dh_header,
-                        tooltip=tooltips.get("step_viz_header_split_x3dh", ""),
-                        bgcolor=ft.Colors.SECONDARY_CONTAINER,
-                        text_color=ft.Colors.ON_SECONDARY_CONTAINER,
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                spacing=16,
-            ),
-        ]
-        header_split_data_flow = ft.Column(
-            controls=header_split_controls,
-            spacing=6,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-        )
-
-    bootstrap_init_data_flow = None
-    if step_data.x3dh_header is not None:
-        bootstrap_button = ft.Button(
-            "Show X3DH bootstrap steps",
-            on_click=lambda _: on_show_x3dh_bootstrap() if on_show_x3dh_bootstrap else None,
-        )
-        party_initialized = not step_data.was_x3dh_bootstrapped
-        bootstrap_init_controls: list[ft.Control] = [
-            ft.Text("X3DH bootstrap / initialization check", weight="bold"),
-            flow_node(
-                "Party status",
-                "Party initialized" if party_initialized else "Party not yet initialized",
-                width=280,
-                tooltip=tooltips.get(
-                    "step_viz_bootstrap_party_initialized"
-                    if party_initialized
-                    else "step_viz_bootstrap_party_not_initialized",
-                    ""
-                ),
-                bgcolor=ft.Colors.SECONDARY_CONTAINER if party_initialized else ft.Colors.ERROR_CONTAINER,
-                text_color=ft.Colors.ON_SECONDARY_CONTAINER if party_initialized else ft.Colors.ON_ERROR_CONTAINER,
-            ),
-            ft.Divider(height=1),
-        ]
-        if not party_initialized:
-            bootstrap_init_controls.extend([
-                flow_node(
-                    "X3DH header",
-                    _x3dh_header_preview(step_data.x3dh_header),
-                    width=320,
-                    full_value=step_data.x3dh_header,
-                    tooltip=tooltips.get("step_viz_bootstrap_x3dh_header", ""),
-                ),
-                ft.Text("↓", size=24),
-                flow_node(
-                    "X3DH Bootstrap",
-                    "Initialize Double Ratchet state from X3DH",
-                    width=340,
-                    height=80,
-                    circle=True,
-                    tooltip=tooltips.get("step_viz_bootstrap_fn", ""),
-                ),
-                ft.Column(
-                    controls=[
-                        ft.Text("Click button to view detailed bootstrap steps:", size=12),
-                        bootstrap_button,
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    spacing=10,
-                ),
-                ft.Text("↓", size=24),
-                flow_node(
-                    "Result",
-                    "Party was initialized during this receive",
-                    width=360,
-                    tooltip=tooltips.get("step_viz_bootstrap_result", ""),
-                ),
-            ])
-        bootstrap_init_data_flow = ft.Column(
-            controls=bootstrap_init_controls,
-            spacing=6,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-        )
 
     steps = [
         {
@@ -1185,17 +902,44 @@ def show_receiving_step_visualization_dialog(
         },
     ]
 
-    if header_split_data_flow is not None:
-        steps.append({
-            "title": "Header split (X3DH metadata extraction)",
-            "control": header_split_data_flow,
-        })
-
-    if bootstrap_init_data_flow is not None:
-        steps.append({
-            "title": "X3DH Initialization (party bootstrap)",
-            "control": bootstrap_init_data_flow,
-        })
+    if step_data.x3dh_header is not None:
+        steps.append(build_header_split_step(
+            protocol_label="X3DH",
+            combined_preview=combined_header_preview,
+            combined_full=combined_header_full,
+            message_header_preview=f"(dh, pn, n)={header_preview}",
+            message_header_full={
+                "dh": header_dh_full,
+                "pn": step_data.header.pn,
+                "n": step_data.header.n + 1,
+            },
+            protocol_header_preview=x3dh_header_preview(step_data.x3dh_header),
+            protocol_header_full=step_data.x3dh_header,
+            combined_tooltip=tooltips.get("step_viz_header_split_complete", ""),
+            split_tooltip=tooltips.get("step_viz_header_split_fn", ""),
+            message_header_tooltip=tooltips.get("step_viz_header_split_base", ""),
+            protocol_header_tooltip=tooltips.get("step_viz_header_split_x3dh", ""),
+            combined_width=460,
+            message_header_width=240,
+        ))
+        party_initialized = not step_data.was_x3dh_bootstrapped
+        steps.append(build_bootstrap_init_step(
+            title="X3DH bootstrap / initialization check",
+            was_bootstrapped=step_data.was_x3dh_bootstrapped,
+            protocol_header_label="X3DH header",
+            protocol_header_preview=x3dh_header_preview(step_data.x3dh_header),
+            protocol_header_full=step_data.x3dh_header,
+            on_show_bootstrap=on_show_x3dh_bootstrap,
+            button_label="Show X3DH bootstrap steps",
+            bootstrap_fn_label="X3DH Bootstrap",
+            bootstrap_fn_value="Initialize Double Ratchet state from X3DH",
+            party_tooltip=tooltips.get(
+                "step_viz_bootstrap_party_initialized" if party_initialized else "step_viz_bootstrap_party_not_initialized",
+                ""
+            ),
+            protocol_header_tooltip=tooltips.get("step_viz_bootstrap_x3dh_header", ""),
+            bootstrap_fn_tooltip=tooltips.get("step_viz_bootstrap_fn", ""),
+        ))
 
     steps.append({
         "title": "Skipped-message key check",
@@ -1254,12 +998,7 @@ def show_receiving_step_visualization_dialog(
         ]
     )
 
-    for i, step in enumerate(steps):
-        numbered_title = f"{i + 1}) {step['title']}"
-        step["title"] = numbered_title
-        if isinstance(step["control"], ft.Column) and len(step["control"].controls) > 0:
-            step["control"].controls[0].value = numbered_title
-
+    normalize_step_titles(steps)
     show_step_dialog(page, "Step-by-step visualization of receiving steps", steps)
 
 
@@ -1321,7 +1060,7 @@ def show_alice_x3dh_bootstrap_visualization_dialog(
             ft.Text("1) Receive Pre key Bundle from server", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("Bundle", "IK_B, SPK_B, SPK_B_signature, optional OPK_B", width=420, tooltip=tooltips.get("x3dh_step_node_request_bundle", ""), full_value=(
+                    flow_node("Bundle", "IK_B, SPK_B, SPK_B_signature, optional OPK_B", width=420, tooltip=tooltips.get("x3dh_step_node_request_bundle", ""), full_value=(
                         f"IK_B={last_n_chars(ik_b_pub, 8)}\nSPK_B={last_n_chars(spk_b_pub, 8)}\nSPK_B_signature={last_n_chars(spk_b_signature, 8)}\nOPK_B={last_n_chars(opk_b_pub, 8)}"
                     )),
                 ],
@@ -1338,28 +1077,28 @@ def show_alice_x3dh_bootstrap_visualization_dialog(
             ft.Text("2) Verify SPK_B signature with IK_B", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("IK_B", last_n_chars(bundle.get("identity_dh_public", ""), 8), width=220, full_value=bundle.get("identity_dh_public"), tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
-                    _flow_node("SPK_B_signature", last_n_chars(spk_b_signature, 8), width=220, full_value=spk_b_signature, tooltip=tooltips.get("x3dh_step_key_spk_sig", "")),
+                    flow_node("IK_B", last_n_chars(bundle.get("identity_dh_public", ""), 8), width=220, full_value=bundle.get("identity_dh_public"), tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
+                    flow_node("SPK_B_signature", last_n_chars(spk_b_signature, 8), width=220, full_value=spk_b_signature, tooltip=tooltips.get("x3dh_step_key_spk_sig", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
             ),
             ft.Text("↓", size=24),
-            _flow_node("VERIFY", circle=True, width=210, height=70, tooltip=tooltips.get("x3dh_step_node_verify", "")),
+            flow_node("VERIFY", circle=True, width=210, height=70, tooltip=tooltips.get("x3dh_step_node_verify", "")),
             ft.Text("↓", size=24),
-            _flow_node("Verification result", "VALID signature", width=240, tooltip=tooltips.get("x3dh_step_state_signature_verified", "")),
+            flow_node("Verification result", "VALID signature", width=240, tooltip=tooltips.get("x3dh_step_state_signature_verified", "")),
         ],
         spacing=6,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
     dh_controls: list[ft.Control] = [
-        _flow_node("DH1", "DH(IK_A_priv, SPK_B_pub)", width=420, full_value=f"IK_A_priv={ik_priv}\nSPK_B_pub={spk_b_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
-        _flow_node("DH2", "DH(EK_A_priv, IK_B_pub)", width=420, full_value=f"EK_A_priv={ek_priv}\nIK_B_pub={ik_b_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
-        _flow_node("DH3", "DH(EK_A_priv, SPK_B_pub)", width=420, full_value=f"EK_A_priv={ek_priv}\nSPK_B_pub={spk_b_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
+        flow_node("DH1", "DH(IK_A_priv, SPK_B_pub)", width=420, full_value=f"IK_A_priv={ik_priv}\nSPK_B_pub={spk_b_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
+        flow_node("DH2", "DH(EK_A_priv, IK_B_pub)", width=420, full_value=f"EK_A_priv={ek_priv}\nIK_B_pub={ik_b_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
+        flow_node("DH3", "DH(EK_A_priv, SPK_B_pub)", width=420, full_value=f"EK_A_priv={ek_priv}\nSPK_B_pub={spk_b_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
     ]
     if bundle.get("opk_public"):
-        dh_controls.append(_flow_node("DH4", "DH(EK_A_priv, OPK_B_pub)", width=420, full_value=f"EK_A_priv={ek_priv}\nOPK_B_pub={opk_b_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")))
+        dh_controls.append(flow_node("DH4", "DH(EK_A_priv, OPK_B_pub)", width=420, full_value=f"EK_A_priv={ek_priv}\nOPK_B_pub={opk_b_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")))
 
     step3 = ft.Column(
         controls=[
@@ -1371,9 +1110,9 @@ def show_alice_x3dh_bootstrap_visualization_dialog(
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("KDF_SK", circle=True, width=200, height=70, tooltip=tooltips.get("x3dh_step_node_kdf_sk", "")),
+            flow_node("KDF_SK", circle=True, width=200, height=70, tooltip=tooltips.get("x3dh_step_node_kdf_sk", "")),
             ft.Text("↓", size=24),
-            _flow_node("SK", last_n_chars(sk, 8), width=220, full_value=sk, tooltip=tooltips.get("x3dh_step_key_sk", "")),
+            flow_node("SK", last_n_chars(sk, 8), width=220, full_value=sk, tooltip=tooltips.get("x3dh_step_key_sk", "")),
         ],
         spacing=6,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1383,19 +1122,19 @@ def show_alice_x3dh_bootstrap_visualization_dialog(
         controls=[
             ft.Row(
                 controls=[
-                    _flow_node("IK_A_pub", last_n_chars(ik_a_pub, 8), width=220, full_value=ik_a_pub, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
-                    _flow_node("IK_B_pub", last_n_chars(ik_b_pub, 8), width=220, full_value=ik_b_pub, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
+                    flow_node("IK_A_pub", last_n_chars(ik_a_pub, 8), width=220, full_value=ik_a_pub, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
+                    flow_node("IK_B_pub", last_n_chars(ik_b_pub, 8), width=220, full_value=ik_b_pub, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("CALC_AD", circle=True, width=200, tooltip=tooltips.get("x3dh_step_node_calc_ad", "")),
+            flow_node("CALC_AD", circle=True, width=200, tooltip=tooltips.get("x3dh_step_node_calc_ad", "")),
             ft.Text("↓", size=24),
-            _flow_node("AD", last_n_chars(ad, 8), width=460, full_value=ad, tooltip=tooltips.get("x3dh_step_key_ad", "")),
+            flow_node("AD", last_n_chars(ad, 8), width=460, full_value=ad, tooltip=tooltips.get("x3dh_step_key_ad", "")),
             ft.Divider(height=1),
-            _flow_node("X3DH header prefix", "IK_A_pub | EK_A_pub | Bob_SPK_pub | Bob_OPK_id", width=620, height=95,
+            flow_node("X3DH header prefix", "IK_A_pub | EK_A_pub | Bob_SPK_pub | Bob_OPK_id", width=620, height=95,
                        full_value=header_preview, tooltip=tooltips.get("x3dh_step_node_header", ""),
                        ),
         ],
@@ -1408,7 +1147,7 @@ def show_alice_x3dh_bootstrap_visualization_dialog(
             ft.Text("5) Initialize Double Ratchet and calculate SS", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("Generate DH keypair", circle=True, width=210, height=70, tooltip=tooltips.get("x3dh_step_node_generate_dh", "")),
+                    flow_node("Generate DH keypair", circle=True, width=210, height=70, tooltip=tooltips.get("x3dh_step_node_generate_dh", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
@@ -1416,8 +1155,8 @@ def show_alice_x3dh_bootstrap_visualization_dialog(
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    _flow_node("DHs_pub", last_n_chars(alice_dhs_pub, 8), width=220, full_value=alice_dhs_pub, tooltip=tooltips.get("dr_bootstrap_dhs_pub", "")),
-                    _flow_node("DHs_priv", last_n_chars(alice_dhs_priv, 8), width=220, full_value=alice_dhs_priv, tooltip=tooltips.get("dr_bootstrap_dhs_priv", "")),
+                    flow_node("DHs_pub", last_n_chars(alice_dhs_pub, 8), width=220, full_value=alice_dhs_pub, tooltip=tooltips.get("dr_bootstrap_dhs_pub", "")),
+                    flow_node("DHs_priv", last_n_chars(alice_dhs_priv, 8), width=220, full_value=alice_dhs_priv, tooltip=tooltips.get("dr_bootstrap_dhs_priv", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
@@ -1426,17 +1165,17 @@ def show_alice_x3dh_bootstrap_visualization_dialog(
             ft.Text("", size=24),
             ft.Row(
                 controls=[
-                    _flow_node("DHs_priv", last_n_chars(alice_dhs_priv, 8), width=220, full_value=alice_dhs_priv, tooltip=tooltips.get("dr_bootstrap_dhs_priv", "")),
-                    _flow_node("IK_B_pub", last_n_chars(ik_b_pub, 8), width=220, full_value=ik_b_pub, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
+                    flow_node("DHs_priv", last_n_chars(alice_dhs_priv, 8), width=220, full_value=alice_dhs_priv, tooltip=tooltips.get("dr_bootstrap_dhs_priv", "")),
+                    flow_node("IK_B_pub", last_n_chars(ik_b_pub, 8), width=220, full_value=ik_b_pub, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("DH", "DHs_priv, IK_B_pub -> SS", circle=True, width=260, height=70, tooltip=tooltips.get("x3dh_step_node_dh", "")),
+            flow_node("DH", "DHs_priv, IK_B_pub -> SS", circle=True, width=260, height=70, tooltip=tooltips.get("x3dh_step_node_dh", "")),
             ft.Text("↓", size=24),
-            _flow_node("SS", last_n_chars(ss, 8), width=260, full_value=ss, tooltip=tooltips.get("dr_bootstrap_ss", "")),
+            flow_node("SS", last_n_chars(ss, 8), width=260, full_value=ss, tooltip=tooltips.get("dr_bootstrap_ss", "")),
         ],
         spacing=6,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1447,20 +1186,20 @@ def show_alice_x3dh_bootstrap_visualization_dialog(
             ft.Text("6) Derive RK and CKs", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("SS", last_n_chars(ss, 8), width=220, full_value=ss, tooltip=tooltips.get("dr_bootstrap_ss", "")),
-                    _flow_node("SK", last_n_chars(sk, 8), width=220, full_value=sk, tooltip=tooltips.get("x3dh_step_key_sk", "")),
+                    flow_node("SS", last_n_chars(ss, 8), width=220, full_value=ss, tooltip=tooltips.get("dr_bootstrap_ss", "")),
+                    flow_node("SK", last_n_chars(sk, 8), width=220, full_value=sk, tooltip=tooltips.get("x3dh_step_key_sk", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("KDF_RK", "SS, SK -> RK, CKs", circle=True, width=240, height=70, tooltip=tooltips.get("dr_bootstrap_kdf_rk", "")),
+            flow_node("KDF_RK", "SS, SK -> RK, CKs", circle=True, width=240, height=70, tooltip=tooltips.get("dr_bootstrap_kdf_rk", "")),
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    _flow_node("RK", last_n_chars(rk_after_init, 8), width=220, full_value=rk_after_init, tooltip=tooltips.get("dr_bootstrap_rk", "")),
-                    _flow_node("CKs", last_n_chars(cks_after_init, 8), width=220, full_value=cks_after_init, tooltip=tooltips.get("dr_bootstrap_cks", "")),
+                    flow_node("RK", last_n_chars(rk_after_init, 8), width=220, full_value=rk_after_init, tooltip=tooltips.get("dr_bootstrap_rk", "")),
+                    flow_node("CKs", last_n_chars(cks_after_init, 8), width=220, full_value=cks_after_init, tooltip=tooltips.get("dr_bootstrap_cks", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
@@ -1502,7 +1241,7 @@ def show_bob_x3dh_bootstrap_visualization_dialog(
     step1 = ft.Column(
         controls=[
             ft.Text("1) X3DH header extraction", weight="bold"),
-            _flow_node(
+            flow_node(
                 "X3DH header",
                 f"ik_a={last_n_chars(ik_a_pub, 8)}, ek_a={last_n_chars(ek_a_pub, 8)}, spk_b={last_n_chars(spk_b_pub, 8)}",
                 width=560,
@@ -1510,7 +1249,7 @@ def show_bob_x3dh_bootstrap_visualization_dialog(
                 tooltip=tooltips.get("x3dh_step_node_header", ""),
             ),
             ft.Text("↓", size=24),
-            _flow_node("EXTRACT", circle=True, width=200, height=70, tooltip=tooltips.get("dr_bootstrap_extract", "")),
+            flow_node("EXTRACT", circle=True, width=200, height=70, tooltip=tooltips.get("dr_bootstrap_extract", "")),
         ],
         spacing=6,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1521,8 +1260,8 @@ def show_bob_x3dh_bootstrap_visualization_dialog(
             ft.Text("2) Derive SK from DH outputs (same pattern as A)", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("DH1", "DH(SPK_B_priv, IK_A_pub)", width=320, full_value=f"SPK_B_priv=local\nIK_A_pub={ik_a_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
-                    _flow_node("DH2", "DH(IK_B_priv, EK_A_pub)", width=320, full_value=f"IK_B_priv=local\nEK_A_pub={ek_a_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
+                    flow_node("DH1", "DH(SPK_B_priv, IK_A_pub)", width=320, full_value=f"SPK_B_priv=local\nIK_A_pub={ik_a_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
+                    flow_node("DH2", "DH(IK_B_priv, EK_A_pub)", width=320, full_value=f"IK_B_priv=local\nEK_A_pub={ek_a_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
@@ -1530,17 +1269,17 @@ def show_bob_x3dh_bootstrap_visualization_dialog(
             ),
             ft.Row(
                 controls=[
-                    _flow_node("DH3", "DH(SPK_B_priv, EK_A_pub)", width=320, full_value=f"SPK_B_priv=local\nEK_A_pub={ek_a_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
-                    _flow_node("DH4", "DH(OPK_B_priv, EK_A_pub)", width=320, full_value=f"OPK_B_priv=local (if used)\nOPK_B_id={opk_b_id}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
+                    flow_node("DH3", "DH(SPK_B_priv, EK_A_pub)", width=320, full_value=f"SPK_B_priv=local\nEK_A_pub={ek_a_pub}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
+                    flow_node("DH4", "DH(OPK_B_priv, EK_A_pub)", width=320, full_value=f"OPK_B_priv=local (if used)\nOPK_B_id={opk_b_id}", tooltip=tooltips.get("x3dh_step_node_dh", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("KDF_SK", circle=True, width=200, height=70, tooltip=tooltips.get("x3dh_step_node_kdf_sk", "")),
+            flow_node("KDF_SK", circle=True, width=200, height=70, tooltip=tooltips.get("x3dh_step_node_kdf_sk", "")),
             ft.Text("↓", size=24),
-            _flow_node("SK", last_n_chars(shared_secret, 8), width=220, full_value=shared_secret, tooltip=tooltips.get("x3dh_step_key_sk", "")),
+            flow_node("SK", last_n_chars(shared_secret, 8), width=220, full_value=shared_secret, tooltip=tooltips.get("x3dh_step_key_sk", "")),
         ],
         spacing=6,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1551,17 +1290,17 @@ def show_bob_x3dh_bootstrap_visualization_dialog(
             ft.Text("3) Calculate AD", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("IK_A_pub", last_n_chars(ik_a_pub, 8), width=220, full_value=ik_a_pub, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
-                    _flow_node("IK_B_pub", last_n_chars(bob_spk_public, 8), width=220, full_value=bob_spk_public, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
+                    flow_node("IK_A_pub", last_n_chars(ik_a_pub, 8), width=220, full_value=ik_a_pub, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
+                    flow_node("IK_B_pub", last_n_chars(bob_spk_public, 8), width=220, full_value=bob_spk_public, tooltip=tooltips.get("x3dh_step_key_ik_pub", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("CALC_AD", circle=True, width=200, tooltip=tooltips.get("x3dh_step_node_calc_ad", "")),
+            flow_node("CALC_AD", circle=True, width=200, tooltip=tooltips.get("x3dh_step_node_calc_ad", "")),
             ft.Text("↓", size=24),
-            _flow_node("AD", last_n_chars(session_ad, 8), width=280, full_value=session_ad, tooltip=tooltips.get("x3dh_step_key_ad", "")),
+            flow_node("AD", last_n_chars(session_ad, 8), width=280, full_value=session_ad, tooltip=tooltips.get("x3dh_step_key_ad", "")),
         ],
         spacing=6,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1572,33 +1311,33 @@ def show_bob_x3dh_bootstrap_visualization_dialog(
             ft.Text("4) Set DHs and RK (Bob init state)", weight="bold"),
             ft.Row(
                 controls=[
-                    _flow_node("SPK_B_pub", last_n_chars(bob_spk_public, 8), width=220, full_value=bob_spk_public, tooltip=tooltips.get("x3dh_step_key_spk_pub", "")),
-                    _flow_node("SPK_B_priv", last_n_chars(bob_spk_priv, 8), width=220, full_value=bob_spk_priv, tooltip=tooltips.get("x3dh_step_key_spk_priv", "")),
+                    flow_node("SPK_B_pub", last_n_chars(bob_spk_public, 8), width=220, full_value=bob_spk_public, tooltip=tooltips.get("x3dh_step_key_spk_pub", "")),
+                    flow_node("SPK_B_priv", last_n_chars(bob_spk_priv, 8), width=220, full_value=bob_spk_priv, tooltip=tooltips.get("x3dh_step_key_spk_priv", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            _flow_node("SET_DHS", "DHs <- SPK_B keypair", circle=True, width=260, height=70, tooltip=tooltips.get("dr_bootstrap_set_dhs", "")),
+            flow_node("SET_DHS", "DHs <- SPK_B keypair", circle=True, width=260, height=70, tooltip=tooltips.get("dr_bootstrap_set_dhs", "")),
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[
-                    _flow_node("DHs_pub", last_n_chars(bob_spk_public, 8), width=220, full_value=bob_spk_public, tooltip=tooltips.get("dr_bootstrap_dhs_pub", "")),
-                    _flow_node("DHs_priv", last_n_chars(bob_spk_priv, 8), width=220, full_value=bob_spk_priv, tooltip=tooltips.get("dr_bootstrap_dhs_priv", "")),
+                    flow_node("DHs_pub", last_n_chars(bob_spk_public, 8), width=220, full_value=bob_spk_public, tooltip=tooltips.get("dr_bootstrap_dhs_pub", "")),
+                    flow_node("DHs_priv", last_n_chars(bob_spk_priv, 8), width=220, full_value=bob_spk_priv, tooltip=tooltips.get("dr_bootstrap_dhs_priv", "")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=16,
                 wrap=True,
             ),
             ft.Text("", size=24),
-            _flow_node("SK", last_n_chars(shared_secret, 8), width=220, full_value=shared_secret, tooltip=tooltips.get("x3dh_step_key_sk", "")),
+            flow_node("SK", last_n_chars(shared_secret, 8), width=220, full_value=shared_secret, tooltip=tooltips.get("x3dh_step_key_sk", "")),
             ft.Text("↓", size=24),
-            _flow_node("SET_RK", "RK <- SK", circle=True, width=220, height=70, tooltip=tooltips.get("dr_bootstrap_set_rk", "")),
+            flow_node("SET_RK", "RK <- SK", circle=True, width=220, height=70, tooltip=tooltips.get("dr_bootstrap_set_rk", "")),
             ft.Text("↓", size=24),
-            _flow_node("RK", last_n_chars(shared_secret, 8), width=220, full_value=shared_secret, tooltip=tooltips.get("dr_bootstrap_rk", "")),
+            flow_node("RK", last_n_chars(shared_secret, 8), width=220, full_value=shared_secret, tooltip=tooltips.get("dr_bootstrap_rk", "")),
             ft.Text("↓", size=24),
-            _flow_node("Bob ready", "for Double Ratchet receive chain", width=320, tooltip=tooltips.get("dr_bootstrap_ready", "")),
+            flow_node("Bob ready", "for Double Ratchet receive chain", width=320, tooltip=tooltips.get("dr_bootstrap_ready", "")),
         ],
         spacing=6,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,

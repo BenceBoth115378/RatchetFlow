@@ -8,6 +8,18 @@ from modules.base_view import last_n_chars, make_copy_handler
 from modules.tooltip_helpers import build_tooltip_text
 
 
+SIDE_PANEL_WIDTH = 430
+
+
+def safe_decode_bytes(data: bytes) -> str:
+    if not data:
+        return ""
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data.hex()
+
+
 def is_party_visible(perspective: str, party_name: str) -> bool:
     return perspective == "global" or perspective.lower() == party_name.lower()
 
@@ -431,4 +443,111 @@ def build_key_history_panel(
         expand=True,
         padding=8,
         border_radius=8,
+    )
+
+
+def show_warning_dialog(page: ft.Page, message: str, title: str = "Warning") -> None:
+    def close_dialog(e):
+        dialog.open = False
+        page.update()
+
+    dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text(title),
+        content=ft.Text(message),
+        actions=[ft.TextButton("OK", on_click=close_dialog)],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
+    page.overlay.append(dialog)
+    dialog.open = True
+    page.update()
+
+
+def show_initial_bootstrap_warning(
+    page: ft.Page,
+    message: str,
+    checkbox_label: str,
+    dialog_title: str,
+    on_bootstrap_viz: Callable[[], None] | None = None,
+) -> None:
+    show_bootstrap_checkbox = ft.Checkbox(label=checkbox_label, value=True)
+
+    def close_dialog(e):
+        dialog.open = False
+        page.update()
+        if show_bootstrap_checkbox.value and on_bootstrap_viz is not None:
+            on_bootstrap_viz()
+
+    dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text(dialog_title),
+        content=ft.Column(
+            controls=[ft.Text(message), show_bootstrap_checkbox],
+            tight=True,
+            spacing=8,
+        ),
+        actions=[ft.TextButton("OK", on_click=close_dialog)],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
+    page.overlay.append(dialog)
+    dialog.open = True
+    page.update()
+
+
+def build_perspective_selector(
+    app_state: Any,
+    on_change: Callable,
+    perspectives: list[tuple[str, str]] | None = None,
+) -> ft.RadioGroup:
+    if perspectives is None:
+        perspectives = [("global", "Global"), ("alice", "Alice"), ("bob", "Bob")]
+    return ft.RadioGroup(
+        value=app_state.perspective,
+        content=ft.Row(
+            controls=[ft.Radio(value=v, label=label) for v, label in perspectives],
+            spacing=10,
+        ),
+        on_change=on_change,
+    )
+
+
+def build_module_layout(
+    title_text: str,
+    send_step_visualization_checkbox: ft.Control,
+    receive_step_visualization_checkbox: ft.Control,
+    auto_receive_checkbox: ft.Control,
+    message_count: ft.Control,
+    perspective_selector: ft.Control,
+    on_reset_module: Callable,
+    visual_container: ft.Control,
+) -> ft.Column:
+    return ft.Column(
+        controls=[
+            ft.Row(
+                controls=[
+                    ft.Text(title_text, size=22, weight="bold"),
+                    ft.Row(
+                        controls=[
+                            send_step_visualization_checkbox,
+                            receive_step_visualization_checkbox,
+                            auto_receive_checkbox,
+                        ],
+                        spacing=16,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            ft.Row(
+                controls=[
+                    message_count,
+                    perspective_selector,
+                    ft.TextButton("Reset application", on_click=on_reset_module),
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            visual_container,
+        ],
+        expand=True,
     )

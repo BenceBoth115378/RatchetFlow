@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-import json
-
 import flet as ft
 
 from components.data_classes import X3DHState
+from modules.key_exchange.key_exchange_base_logic import (
+    alice_calculates_associated_data,
+    is_phase1_done,
+    is_phase2_done,
+)
 from modules.key_exchange.key_exchange_base_module import KeyExchangeBaseModule
 from modules.key_exchange.x3dh.logic import (
-    alice_calculates_associated_data,
     alice_generates_ek_and_derives_sk,
     alice_rotates_signed_prekey_bundle,
     alice_sends_initial_message,
@@ -16,8 +17,6 @@ from modules.key_exchange.x3dh.logic import (
     alice_verifies_bundle_signature,
     bob_receives_and_verifies,
     generate_alice_registration_material,
-    is_phase1_done,
-    is_phase2_done,
     new_state,
     request_bob_bundle_for_alice,
     server_sends_alice_opk_to_requester,
@@ -28,50 +27,27 @@ from modules.key_exchange.x3dh.step_visualization import show_x3dh_action_step_v
 from modules.key_exchange.x3dh.view import build_visual
 
 
-def _serialize_x3dh_state(state: X3DHState) -> dict:
-    return asdict(state)
-
-
-def _deserialize_x3dh_state(data: dict) -> X3DHState:
-    return X3DHState(
-        alice_local=data.get("alice_local"),
-        alice_generated=bool(data.get("alice_generated", False)),
-        server_state=data.get("server_state", {}),
-        bob_local=data.get("bob_local"),
-        last_bundle_for_alice=data.get("last_bundle_for_alice"),
-        alice_derived=data.get("alice_derived"),
-        initial_message=data.get("initial_message"),
-        bob_receive_result=data.get("bob_receive_result"),
-        events=data.get("events", []),
-        phase2_signature_verified=bool(data.get("phase2_signature_verified", False)),
-        phase2_ek_generated=bool(data.get("phase2_ek_generated", False)),
-        alice_needs_to_upload_opk=bool(data.get("alice_needs_to_upload_opk", False)),
-    )
-
-
 class X3DHModule(KeyExchangeBaseModule):
-    def __init__(self):
-        self.state = self._new_state()
+    _PROTOCOL_SOURCE_ID = "x3dh"
 
     def _new_state(self) -> X3DHState:
         return new_state()
 
-    def _state_data(self) -> dict:
-        return _serialize_x3dh_state(self.state)
-
-    def _reset_application(self) -> None:
-        self.state = self._new_state()
-
-    def export_state(self) -> dict:
-        return self._state_data()
-
-    def import_state(self, data: dict) -> None:
-        if isinstance(data, dict) and data:
-            if not data.get("events"):
-                data["events"] = []
-            self.state = _deserialize_x3dh_state(data)
-        else:
-            self.state = self._new_state()
+    def _deserialize_state(self, data: dict) -> X3DHState:
+        return X3DHState(
+            alice_local=data.get("alice_local"),
+            alice_generated=bool(data.get("alice_generated", False)),
+            server_state=data.get("server_state", {}),
+            bob_local=data.get("bob_local"),
+            last_bundle_for_alice=data.get("last_bundle_for_alice"),
+            alice_derived=data.get("alice_derived"),
+            initial_message=data.get("initial_message"),
+            bob_receive_result=data.get("bob_receive_result"),
+            events=data.get("events", []),
+            phase2_signature_verified=bool(data.get("phase2_signature_verified", False)),
+            phase2_ek_generated=bool(data.get("phase2_ek_generated", False)),
+            alice_needs_to_upload_opk=bool(data.get("alice_needs_to_upload_opk", False)),
+        )
 
     def _generate_alice_registration_material(self) -> None:
         generate_alice_registration_material(self.state)
@@ -114,34 +90,6 @@ class X3DHModule(KeyExchangeBaseModule):
 
     def _is_phase2_done(self) -> bool:
         return is_phase2_done(self.state)
-
-    def _build_dr_bootstrap_payload(self) -> dict | None:
-        derived = self.state.alice_derived if isinstance(self.state.alice_derived, dict) else None
-        bob_local = self.state.bob_local if isinstance(self.state.bob_local, dict) else None
-        bob_spk = (bob_local or {}).get("signed_prekey") if isinstance((bob_local or {}).get("signed_prekey"), dict) else None
-
-        if not isinstance(derived, dict) or not isinstance(bob_spk, dict):
-            return None
-
-        sk_hex = derived.get("shared_secret")
-        ad_hex = derived.get("associated_data")
-        bob_spk_public = bob_spk.get("public")
-        bob_spk_private = bob_spk.get("private")
-
-        if not all(isinstance(value, str) and value for value in [sk_hex, ad_hex, bob_spk_public, bob_spk_private]):
-            return None
-
-        initial_message = self.state.initial_message if isinstance(self.state.initial_message, dict) else None
-        initial_message_json = json.dumps(initial_message, sort_keys=True) if isinstance(initial_message, dict) else ""
-
-        return {
-            "source": "x3dh",
-            "sk_hex": sk_hex,
-            "ad_hex": ad_hex,
-            "bob_spk_public": bob_spk_public,
-            "bob_spk_private": bob_spk_private,
-            "initial_message_json": initial_message_json,
-        }
 
     def build(self, page, app_state, perspective_selector: ft.Control | None = None):
         status_text = ft.Text("", size=13, color=ft.Colors.BLUE)
@@ -300,6 +248,3 @@ class X3DHModule(KeyExchangeBaseModule):
         refresh()
         return visual_container
 
-
-# Backward compatibility alias for existing imports.
-X3DHModule = X3DHModule

@@ -5,16 +5,20 @@ from typing import Any, Callable
 import flet as ft
 
 from components.data_classes import SpqrHeader, SpqrRatchetState
-from modules.base_step_visualization import (
-    to_text as _shared_to_text,
-)
-from modules.messaging.messaging_base_step_visualization import (
+from modules.base_steps import (
     func_node,
+    normalize_step_titles,
     party_state_panel,
     show_step_dialog,
+    to_text as _shared_to_text,
     var_node,
+)
+from modules.messaging.messaging_base_steps import (
+    format_plaintext,
     last_n_chars,
-    format_pqxdh_header_preview
+    pqxdh_header_preview,
+    build_header_split_step,
+    build_bootstrap_init_step,
 )
 from modules.messaging.messaging_base_view import (
     build_chunk_send_steps,
@@ -26,19 +30,6 @@ from modules.messaging.messaging_base_view import (
 
 from modules.tooltip_helpers import get_tooltip_messages
 
-
-def _format_plaintext(value: Any) -> str | Any:
-    """Convert plaintext bytes to a readable string for visualization."""
-    if value is None:
-        return None
-    if isinstance(value, list) and all(isinstance(item, int) and 0 <= item <= 255 for item in value):
-        value = bytes(value)
-    if isinstance(value, (bytes, bytearray)):
-        try:
-            return value.decode('utf-8', errors='replace')
-        except Exception:
-            return value
-    return value
 
 
 def _tt(key: str) -> str:
@@ -1699,7 +1690,7 @@ def _build_send_message_pipeline_steps(step_data: dict[str, Any], tooltips: dict
 
     pqxdh_header = step_data.get("pqxdh_header") if isinstance(step_data.get("pqxdh_header"), dict) else None
     if isinstance(pqxdh_header, dict):
-        pqxdh_preview = _pqxdh_header_preview(pqxdh_header)
+        pqxdh_preview = pqxdh_header_preview(pqxdh_header)
         combined_header_full = {
             "header": header_payload,
             "pqxdh_header": pqxdh_header,
@@ -1740,7 +1731,7 @@ def _build_send_message_pipeline_steps(step_data: dict[str, Any], tooltips: dict
                     ft.Row(
                         controls=[
                             var_node("mk", full_value=mk, tooltip=_tt("spqr_step_output_key")),
-                            var_node("plaintext", full_value=_format_plaintext(plaintext), tooltip=_tt("spqr_step_chunk")),
+                            var_node("plaintext", full_value=format_plaintext(plaintext), tooltip=_tt("spqr_step_chunk")),
                             var_node("AD||header", full_value=ad_header, tooltip=_tt("spqr_step_header_with_mac")),
                         ],
                         alignment=ft.MainAxisAlignment.CENTER,
@@ -1856,7 +1847,7 @@ def _build_receive_message_pipeline_steps(step_data: dict[str, Any], tooltips: d
                         full_value="plaintext = DECRYPT(mk, ciphertext, AD || header)",
                     ),
                     ft.Text("↓", size=24),
-                    var_node("plaintext", full_value=_format_plaintext(decrypted), tooltip=_tt("spqr_step_chunk")),
+                    var_node("plaintext", full_value=format_plaintext(decrypted), tooltip=_tt("spqr_step_chunk")),
                 ],
                 spacing=6,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1959,7 +1950,7 @@ def show_alice_pqxdh_bootstrap_visualization_dialog(
 
     shared_secret = derived.get("shared_secret_hex") if isinstance(derived.get("shared_secret_hex"), str) else derived.get("shared_secret")
     associated_data = derived.get("associated_data_hex") if isinstance(derived.get("associated_data_hex"), str) else derived.get("associated_data")
-    header_preview = _pqxdh_header_preview(real_pqxdh_header)
+    header_preview = pqxdh_header_preview(real_pqxdh_header)
     alice_identity_public = None
     if isinstance(pqxdh_state_data, dict):
         alice_local = pqxdh_state_data.get("alice_local", {})
@@ -2188,7 +2179,7 @@ def show_alice_pqxdh_bootstrap_visualization_dialog(
         {"title": "Alice computes AD and header prefix", "control": step6},
         {"title": "Alice initializes SPQR state", "control": step7},
     ]
-    _normalize_step_titles(steps)
+    normalize_step_titles(steps)
     show_step_dialog(page, "SPQR Alice bootstrap", steps, on_close=on_close)
 
 
@@ -2208,7 +2199,7 @@ def show_bob_pqxdh_bootstrap_visualization_dialog(
         **get_tooltip_messages("spqr"),
     }
 
-    header_preview = _pqxdh_header_preview(pqxdh_header)
+    header_preview = pqxdh_header_preview(pqxdh_header)
 
     ik_a_public = pqxdh_header.get("ik_a_public") if isinstance(pqxdh_header, dict) else None
     kem_ciphertext = pqxdh_header.get("pq_ciphertext") if isinstance(pqxdh_header, dict) else None
@@ -2368,167 +2359,8 @@ def show_bob_pqxdh_bootstrap_visualization_dialog(
         {"title": "Calculate associated data AD", "control": step4},
         {"title": "Initialize Bob SCKA state", "control": step5},
     ]
-    _normalize_step_titles(steps)
+    normalize_step_titles(steps)
     show_step_dialog(page, "SPQR Bob PQXDH bootstrap", steps, on_close=on_close)
-
-
-def _pqxdh_header_preview(pqxdh_header: dict[str, Any] | None) -> str:
-    """PQXDH header preview (delegates to shared base)."""
-    return format_pqxdh_header_preview(pqxdh_header, last_n_chars)
-
-
-def _build_pqxdh_header_split_step(
-    step_data: dict[str, Any],
-    tooltips: dict[str, str],
-) -> dict[str, Any] | None:
-    pqxdh_header = step_data.get("pqxdh_header") if isinstance(step_data.get("pqxdh_header"), dict) else None
-    header: SpqrHeader | None = step_data.get("header") if isinstance(step_data.get("header"), SpqrHeader) else None
-    if not isinstance(pqxdh_header, dict):
-        return None
-
-    header_msg = header.msg if header is not None else None
-    header_payload = {
-        "msg": header_msg.to_dict() if header_msg is not None else None,
-        "n": header.n if header is not None else None,
-    }
-    combined_header_full = {
-        "header": header_payload,
-        "pqxdh_header": pqxdh_header,
-    }
-    combined_header_preview = f"{_header_preview(header)} | pqxdh: {_pqxdh_header_preview(pqxdh_header)}"
-
-    return {
-        "title": "Header split (PQXDH metadata extraction)",
-        "control": ft.Column(
-            controls=[
-                ft.Text("Header split (PQXDH metadata extraction)", weight="bold"),
-                var_node(
-                    "Complete header",
-                    value=combined_header_preview,
-                    width=620,
-                    full_value=combined_header_full,
-                    tooltip=tooltips.get("pqxdh_step_node_verify_pq", ""),
-                ),
-                ft.Text("↓", size=24),
-                func_node(
-                    "SPLIT",
-                    width=200,
-                    height=70,
-                    tooltip=tooltips.get("spqr_step_state_op", ""),
-                ),
-                ft.Text("↓", size=24),
-                ft.Row(
-                    controls=[
-                        var_node(
-                            "Message header",
-                            value=_header_preview(header),
-                            width=280,
-                            full_value=header_payload,
-                            tooltip=tooltips.get("spqr_step_header", ""),
-                        ),
-                        var_node(
-                            "PQXDH header",
-                            value=_pqxdh_header_preview(pqxdh_header),
-                            width=420,
-                            full_value=pqxdh_header,
-                            tooltip=tooltips.get("pqxdh_step_node_verify_pq", ""),
-                            bgcolor=ft.Colors.SECONDARY_CONTAINER,
-                            text_color=ft.Colors.ON_SECONDARY_CONTAINER,
-                        ),
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    spacing=16,
-                    wrap=True,
-                ),
-            ],
-            spacing=6,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-        ),
-    }
-
-
-def _build_pqxdh_bootstrap_init_step(
-    step_data: dict[str, Any],
-    tooltips: dict[str, str],
-    on_show_pqxdh_bootstrap: Callable[[], None] | None = None,
-) -> dict[str, Any] | None:
-    pqxdh_header = step_data.get("pqxdh_header") if isinstance(step_data.get("pqxdh_header"), dict) else None
-    if not isinstance(pqxdh_header, dict):
-        return None
-
-    was_bootstrapped = bool(step_data.get("was_pqxdh_bootstrapped", False))
-    already_initialized = not was_bootstrapped
-
-    controls: list[ft.Control] = [
-        ft.Text("PQXDH initialization (party bootstrap)", weight="bold"),
-        var_node(
-            "Party status",
-            value="Bob already initialized" if already_initialized else "Bob not initialized yet",
-            width=320,
-            tooltip=tooltips.get("spqr_step_state_op", ""),
-            full_value=already_initialized,
-            bgcolor=ft.Colors.SECONDARY_CONTAINER if already_initialized else ft.Colors.ERROR_CONTAINER,
-            text_color=ft.Colors.ON_SECONDARY_CONTAINER if already_initialized else ft.Colors.ON_ERROR_CONTAINER,
-        ),
-        ft.Divider(height=1),
-    ]
-
-    if was_bootstrapped:
-        controls.extend([
-            var_node(
-                "PQXDH header",
-                value=_pqxdh_header_preview(pqxdh_header),
-                width=420,
-                full_value=pqxdh_header,
-                tooltip=tooltips.get("pqxdh_step_node_verify_pq", ""),
-            ),
-            ft.Text("↓", size=24),
-            func_node(
-                "PQXDH Bootstrap",
-                value="Initialize SPQR state from PQXDH",
-                width=360,
-                height=90,
-                tooltip=tooltips.get("spqr_step_state_op", ""),
-            ),
-        ])
-        if on_show_pqxdh_bootstrap is not None:
-            controls.append(
-                ft.Column(
-                    controls=[
-                        ft.Text("Click button to view detailed bootstrap steps:", size=12),
-                        ft.Button("Show Bob SPQR PQXDH bootstrap", on_click=lambda _: on_show_pqxdh_bootstrap()),
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    spacing=10,
-                )
-            )
-        controls.extend([
-            ft.Text("↓", size=24),
-            var_node(
-                "Result",
-                value="Bob was initialized during this receive",
-                width=380,
-                tooltip=tooltips.get("spqr_step_state_op", ""),
-            ),
-        ])
-
-    return {
-        "title": "PQXDH initialization (party bootstrap)",
-        "control": ft.Column(
-            controls=controls,
-            spacing=6,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-        ),
-    }
-
-
-def _normalize_step_titles(steps: list[dict[str, Any]]) -> None:
-    for index, step in enumerate(steps):
-        numbered_title = f"{index + 1}) {step['title']}"
-        step["title"] = numbered_title
-        control = step.get("control")
-        if isinstance(control, ft.Column) and control.controls and isinstance(control.controls[0], ft.Text):
-            control.controls[0].value = numbered_title
 
 
 def show_spqr_step_visualization_dialog(
@@ -2552,12 +2384,51 @@ def show_spqr_step_visualization_dialog(
     ]
 
     if action == "receive":
-        header_split_step = _build_pqxdh_header_split_step(step_data, tooltips)
-        if header_split_step is not None:
-            steps.append(header_split_step)
-        bootstrap_init_step = _build_pqxdh_bootstrap_init_step(step_data, tooltips, on_show_pqxdh_bootstrap)
-        if bootstrap_init_step is not None:
-            steps.append(bootstrap_init_step)
+        pqxdh_header = step_data.get("pqxdh_header") if isinstance(step_data.get("pqxdh_header"), dict) else None
+        if isinstance(pqxdh_header, dict):
+            header_msg = header.msg if header is not None else None
+            header_payload = {
+                "msg": header_msg.to_dict() if header_msg is not None else None,
+                "n": header.n if header is not None else None,
+            }
+            combined_header_full = {"header": header_payload, "pqxdh_header": pqxdh_header}
+            combined_header_preview = f"{_header_preview(header)} | pqxdh: {pqxdh_header_preview(pqxdh_header)}"
+            steps.append(build_header_split_step(
+                protocol_label="PQXDH",
+                combined_preview=combined_header_preview,
+                combined_full=combined_header_full,
+                message_header_preview=_header_preview(header),
+                message_header_full=header_payload,
+                protocol_header_preview=pqxdh_header_preview(pqxdh_header),
+                protocol_header_full=pqxdh_header,
+                combined_tooltip=tooltips.get("pqxdh_step_node_verify_pq", ""),
+                split_tooltip=tooltips.get("spqr_step_state_op", ""),
+                message_header_tooltip=tooltips.get("spqr_step_header", ""),
+                protocol_header_tooltip=tooltips.get("pqxdh_step_node_verify_pq", ""),
+                combined_width=620,
+                message_header_width=280,
+            ))
+            steps.append(build_bootstrap_init_step(
+                title="PQXDH initialization (party bootstrap)",
+                was_bootstrapped=bool(step_data.get("was_pqxdh_bootstrapped", False)),
+                protocol_header_label="PQXDH header",
+                protocol_header_preview=pqxdh_header_preview(pqxdh_header),
+                protocol_header_full=pqxdh_header,
+                on_show_bootstrap=on_show_pqxdh_bootstrap,
+                button_label="Show Bob SPQR PQXDH bootstrap",
+                bootstrap_fn_label="PQXDH Bootstrap",
+                bootstrap_fn_value="Initialize SPQR state from PQXDH",
+                result_text="Bob was initialized during this receive",
+                party_initialized_text="Bob already initialized",
+                party_not_initialized_text="Bob not initialized yet",
+                party_tooltip=tooltips.get("spqr_step_state_op", ""),
+                protocol_header_tooltip=tooltips.get("pqxdh_step_node_verify_pq", ""),
+                bootstrap_fn_tooltip=tooltips.get("spqr_step_state_op", ""),
+                party_width=320,
+                protocol_header_width=420,
+                bootstrap_fn_width=360,
+                bootstrap_fn_height=90,
+            ))
 
     chain_steps = (
         _build_send_steps(state_name, step_data, tooltips)
@@ -2576,6 +2447,6 @@ def show_spqr_step_visualization_dialog(
         steps.extend(_build_receive_message_pipeline_steps(step_data, tooltips))
     steps.append(_build_after_step(action, str(after.get("state", after.get("node", state_name))), before, after, tooltips))
 
-    _normalize_step_titles(steps)
+    normalize_step_titles(steps)
     dialog_title = f"SPQR {action.capitalize()} visualization:"
     show_step_dialog(page, dialog_title, steps, on_close=on_close)

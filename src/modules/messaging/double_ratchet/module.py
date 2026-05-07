@@ -14,6 +14,12 @@ from components.data_classes import (
     SendStepVisualizationSnapshot,
 )
 from modules.messaging.messaging_base_module import MessagingBaseModule, encode_nested, decode_nested
+from modules.messaging.messaging_base_view import (
+    show_warning_dialog,
+    show_initial_bootstrap_warning,
+    build_perspective_selector,
+    build_module_layout,
+)
 from modules.messaging.double_ratchet.logic import (
     RatchetInitBob,
     RatchetEncrypt,
@@ -21,8 +27,8 @@ from modules.messaging.double_ratchet.logic import (
     initialize_session_from_x3dh,
 )
 from modules import external as ext
+from modules.key_exchange.key_exchange_base_logic import alice_calculates_associated_data
 from modules.key_exchange.x3dh.logic import (
-    alice_calculates_associated_data,
     alice_generates_ek_and_derives_sk,
     alice_sends_initial_message,
     alice_verifies_bundle_signature,
@@ -220,8 +226,8 @@ class DoubleRatchetModule(MessagingBaseModule):
         self.session = DoubleRatchetState()
         self.pending_messages: list[dict[str, Any]] = []
         self._next_pending_id = 1
-        self._send_snapshots: dict[int, SendStepVisualizationSnapshot] = {}
-        self._receive_snapshots: dict[int, ReceiveStepVisualizationSnapshot] = {}
+        self._send_steps: dict[int, SendStepVisualizationSnapshot] = {}
+        self._receive_steps: dict[int, ReceiveStepVisualizationSnapshot] = {}
         self._attacker_compromised_secrets: dict[str, dict[str, Any]] = {}
         self._initial_warning_shown = False
         self._session_ad: bytes = b""
@@ -233,7 +239,7 @@ class DoubleRatchetModule(MessagingBaseModule):
         self._x3dh_alice_received_bob_reply: bool = False
         self._pending_show_alice_x3dh_bootstrap: bool = True
         self._last_bob_bootstrap_info: dict[str, Any] | None = None
-        self._reset_session_with_initializer("alice")
+        self._reset_session()
 
     def export_state(self) -> dict:
         return {
@@ -356,7 +362,7 @@ class DoubleRatchetModule(MessagingBaseModule):
         self._next_pending_id = max(max_log_seq_id, max_pending_seq_id) + 1
 
         if self._x3dh_shared_secret is None or self._x3dh_bob_spk_pair is None:
-            self._reset_session_with_initializer("alice")
+            self._reset_session()
 
     def _build_hint_message(self, sender: str) -> str:
         sender_key = sender.lower()
@@ -376,8 +382,7 @@ class DoubleRatchetModule(MessagingBaseModule):
             return self.session.responder
         raise ValueError(f"Unknown party: {name}")
 
-    def _reset_session_with_initializer(self, initializer_name: str) -> None:
-        _ = initializer_name
+    def _reset_session(self) -> None:
         initializer = PartyState("Alice")
         responder = PartyState("Bob")
 
@@ -420,8 +425,8 @@ class DoubleRatchetModule(MessagingBaseModule):
         )
         self.pending_messages = []
         self._next_pending_id = 1
-        self._send_snapshots = {}
-        self._receive_snapshots = {}
+        self._send_steps = {}
+        self._receive_steps = {}
         initialize_session_from_x3dh(self.session, shared_secret, bob_spk_pair)
 
         bob_state = self._get_party("bob")
@@ -574,10 +579,10 @@ class DoubleRatchetModule(MessagingBaseModule):
         )
 
         # Track key generation from this receive step.
-        step_number = len(self._receive_snapshots) + 1
+        step_number = len(self._receive_steps) + 1
         track_keys_from_receive_snapshot(receiver_state, step_number, snapshot, pending_id)
 
-        self._receive_snapshots[pending_id] = snapshot
+        self._receive_steps[pending_id] = snapshot
         return snapshot
 
     def send_message(
@@ -649,7 +654,7 @@ class DoubleRatchetModule(MessagingBaseModule):
         )
 
         # Track key generation from this send step.
-        step_number = len(self._send_snapshots) + 1
+        step_number = len(self._send_steps) + 1
         track_keys_from_send_snapshot(sender_state, step_number, snapshot, pending_id)
 
         return snapshot
@@ -672,86 +677,25 @@ class DoubleRatchetModule(MessagingBaseModule):
         bob_input = ft.TextField(dense=True, expand=True)
         visual_container = ft.Container(expand=True)
 
-        def show_warning(message: str):
-            def close_dialog(e):
-                dialog.open = False
-                page.update()
-
-            dialog = ft.AlertDialog(
-                modal=True,
-                title=ft.Text("Warning"),
-                content=ft.Text(message),
-                actions=[
-                    ft.TextButton("OK", on_click=close_dialog),
-                ],
-                actions_alignment=ft.MainAxisAlignment.END,
-            )
-
-            page.overlay.append(dialog)
-            dialog.open = True
-            page.update()
-
-        def show_initial_warning_with_bootstrap_option(message: str) -> None:
-            show_bootstrap_checkbox = ft.Checkbox(
-                label="Show Alice X3DH steps after closing",
-                value=True,
-            )
-
-            def close_dialog(e):
-                dialog.open = False
-                page.update()
-                if show_bootstrap_checkbox.value and self._pending_show_alice_x3dh_bootstrap:
-                    self._pending_show_alice_x3dh_bootstrap = False
-                    show_alice_x3dh_bootstrap_visualization()
-
-            dialog = ft.AlertDialog(
-                modal=True,
-                title=ft.Text("Warning"),
-                content=ft.Column(
-                    controls=[
-                        ft.Text(message),
-                        show_bootstrap_checkbox,
-                    ],
-                    tight=True,
-                    spacing=8,
-                ),
-                actions=[
-                    ft.TextButton("OK", on_click=close_dialog),
-                ],
-                actions_alignment=ft.MainAxisAlignment.END,
-            )
-
-            page.overlay.append(dialog)
-            dialog.open = True
+        def _on_perspective_change(e):
+            app_state.perspective = e.control.value
+            refresh_view()
             page.update()
 
         if perspective_selector is None:
-            def _on_perspective_change_local(e):
-                app_state.perspective = e.control.value
-                refresh_view()
-                page.update()
-
-            perspective_selector = ft.RadioGroup(
-                value=app_state.perspective,
-                content=ft.Row(
-                    controls=[
-                        ft.Radio(value="global", label="Global"),
-                        ft.Radio(value="alice", label="Alice"),
-                        ft.Radio(value="bob", label="Bob"),
-                        ft.Radio(value="attacker", label="Attacker"),
-                    ],
-                    spacing=10,
-                ),
-                on_change=_on_perspective_change_local,
+            perspective_selector = build_perspective_selector(
+                app_state,
+                _on_perspective_change,
+                [("global", "Global"), ("alice", "Alice"), ("bob", "Bob"), ("attacker", "Attacker")],
             )
 
-        def show_step_visualization(
+        def _show_send_step(
             step_data: SendStepVisualizationSnapshot,
             on_close=None,
         ) -> None:
             show_sending_step_visualization_dialog(page, step_data, on_close=on_close)
 
-        def show_receive_step_visualization(step_data: ReceiveStepVisualizationSnapshot, on_show_x3dh_bootstrap: Callable[[], None] | None = None) -> None:
+        def _show_receive_step(step_data: ReceiveStepVisualizationSnapshot, on_show_x3dh_bootstrap: Callable[[], None] | None = None) -> None:
             show_receiving_step_visualization_dialog(page, step_data, on_show_x3dh_bootstrap=on_show_x3dh_bootstrap)
 
         def show_alice_x3dh_bootstrap_visualization() -> None:
@@ -766,6 +710,11 @@ class DoubleRatchetModule(MessagingBaseModule):
                 bob_spk_pub=alice_state.DHr if isinstance(alice_state.DHr, str) else "",
                 session_ad=self._session_ad,
             )
+
+        def _on_bootstrap_viz() -> None:
+            if self._pending_show_alice_x3dh_bootstrap:
+                self._pending_show_alice_x3dh_bootstrap = False
+                show_alice_x3dh_bootstrap_visualization()
 
         def show_bob_x3dh_bootstrap_visualization(
             x3dh_header: dict[str, Any],
@@ -803,7 +752,7 @@ class DoubleRatchetModule(MessagingBaseModule):
                 return
             if not _is_global_or_recipient_perspective(step_data):
                 return
-            receive_snapshot = self._receive_snapshots.get(step_data.pending_id)
+            receive_snapshot = self._receive_steps.get(step_data.pending_id)
             if receive_snapshot is None:
                 return
             
@@ -812,7 +761,7 @@ class DoubleRatchetModule(MessagingBaseModule):
                 if receive_snapshot.x3dh_header is not None and receive_snapshot.was_x3dh_bootstrapped:
                     show_bob_x3dh_bootstrap_visualization(receive_snapshot.x3dh_header)
             
-            show_receive_step_visualization(receive_snapshot, on_show_x3dh_bootstrap=on_show_x3dh_bootstrap)
+            _show_receive_step(receive_snapshot, on_show_x3dh_bootstrap=on_show_x3dh_bootstrap)
 
         def _is_attacker_perspective() -> bool:
             return app_state.perspective == "attacker"
@@ -875,14 +824,14 @@ class DoubleRatchetModule(MessagingBaseModule):
                 on_send_bob=on_send_bob,
                 pending_messages=self.pending_messages,
                 on_receive_pending=on_receive_pending,
-                on_show_send_visualization=lambda sid: show_step_visualization(
-                    self._send_snapshots[sid]
-                ) if sid in self._send_snapshots else None,
+                on_show_send_visualization=lambda sid: _show_send_step(
+                    self._send_steps[sid]
+                ) if sid in self._send_steps else None,
                 on_show_receive_visualization=lambda sid: (
                     lambda snapshot: (
-                        lambda on_show_x3dh: show_receive_step_visualization(snapshot, on_show_x3dh_bootstrap=on_show_x3dh)
+                        lambda on_show_x3dh: _show_receive_step(snapshot, on_show_x3dh_bootstrap=on_show_x3dh)
                     )(lambda: show_bob_x3dh_bootstrap_visualization(snapshot.x3dh_header) if snapshot.x3dh_header and snapshot.was_x3dh_bootstrapped else None)
-                )(self._receive_snapshots[sid]) if sid in self._receive_snapshots else None,
+                )(self._receive_steps[sid]) if sid in self._receive_steps else None,
                 on_show_alice_x3dh_bootstrap=show_alice_x3dh_bootstrap_visualization,
                 on_show_bob_x3dh_bootstrap=lambda msg: show_bob_x3dh_bootstrap_visualization(
                     msg.header._asdict() if hasattr(msg, "header") and hasattr(msg.header, "_asdict") else {},
@@ -899,7 +848,7 @@ class DoubleRatchetModule(MessagingBaseModule):
                     fallback_plaintext=alice_input.hint_text,
                 )
             except ValueError as exc:
-                show_warning(str(exc))
+                show_warning_dialog(page, str(exc))
                 return
             alice_input.value = ""
             _auto_receive_if_enabled(step_data)
@@ -907,11 +856,11 @@ class DoubleRatchetModule(MessagingBaseModule):
             page.update()
             warning_message = step_data.initializer_switch_warning if step_data is not None else None
             if warning_message:
-                show_warning(warning_message)
+                show_warning_dialog(page, warning_message)
             if step_data is not None:
-                self._send_snapshots[step_data.pending_id] = step_data
+                self._send_steps[step_data.pending_id] = step_data
             if send_step_visualization_checkbox.value and step_data is not None and not warning_message:
-                show_step_visualization(
+                _show_send_step(
                     step_data,
                     on_close=lambda: _auto_show_receive_visualization_after_send(step_data),
                 )
@@ -926,7 +875,7 @@ class DoubleRatchetModule(MessagingBaseModule):
                     fallback_plaintext=bob_input.hint_text,
                 )
             except ValueError as exc:
-                show_warning(str(exc))
+                show_warning_dialog(page, str(exc))
                 return
             bob_input.value = ""
             _auto_receive_if_enabled(step_data)
@@ -934,11 +883,11 @@ class DoubleRatchetModule(MessagingBaseModule):
             page.update()
             warning_message = step_data.initializer_switch_warning if step_data is not None else None
             if warning_message:
-                show_warning(warning_message)
+                show_warning_dialog(page, warning_message)
             if step_data is not None:
-                self._send_snapshots[step_data.pending_id] = step_data
+                self._send_steps[step_data.pending_id] = step_data
             if send_step_visualization_checkbox.value and step_data is not None and not warning_message:
-                show_step_visualization(
+                _show_send_step(
                     step_data,
                     on_close=lambda: _auto_show_receive_visualization_after_send(step_data),
                 )
@@ -956,14 +905,14 @@ class DoubleRatchetModule(MessagingBaseModule):
                     if step_data.x3dh_header is not None and step_data.was_x3dh_bootstrapped:
                         show_bob_x3dh_bootstrap_visualization(step_data.x3dh_header)
                 
-                show_receive_step_visualization(step_data, on_show_x3dh_bootstrap=on_show_x3dh_bootstrap)
+                _show_receive_step(step_data, on_show_x3dh_bootstrap=on_show_x3dh_bootstrap)
 
         def on_reset_module(e) -> None:
-            self._reset_session_with_initializer("alice")
+            self._reset_session()
             self._attacker_compromised_secrets.clear()
             refresh_view()
             page.update()
-            show_initial_warning_with_bootstrap_option("Double Ratchet reset completed with a fresh X3DH bootstrap.")
+            show_initial_bootstrap_warning(page, "Double Ratchet reset completed with a fresh X3DH bootstrap.", "Show Alice X3DH steps after closing", "Warning", _on_bootstrap_viz)
 
         def on_auto_receive_changed(e) -> None:
             nonlocal auto_receive_user_enabled
@@ -976,38 +925,18 @@ class DoubleRatchetModule(MessagingBaseModule):
 
         refresh_view()
         if not self._initial_warning_shown:
-            show_initial_warning_with_bootstrap_option(self._build_initializer_switch_warning("", ""))
+            show_initial_bootstrap_warning(page, self._build_initializer_switch_warning("", ""), "Show Alice X3DH steps after closing", "Warning", _on_bootstrap_viz)
             self._initial_warning_shown = True
 
-        return ft.Column(
-            controls=[
-                ft.Row(
-                    controls=[
-                        ft.Text("Double Ratchet Simulation", size=22, weight="bold"),
-                        ft.Row(
-                            controls=[
-                                send_step_visualization_checkbox,
-                                receive_step_visualization_checkbox,
-                                auto_receive_checkbox,
-                            ],
-                            spacing=16,
-                        ),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                ft.Row(
-                    controls=[
-                        message_count,
-                        perspective_selector,
-                        ft.TextButton("Reset application", on_click=on_reset_module),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                visual_container,
-            ],
-            expand=True,
+        return build_module_layout(
+            title_text="Double Ratchet Simulation",
+            send_step_visualization_checkbox=send_step_visualization_checkbox,
+            receive_step_visualization_checkbox=receive_step_visualization_checkbox,
+            auto_receive_checkbox=auto_receive_checkbox,
+            message_count=message_count,
+            perspective_selector=perspective_selector,
+            on_reset_module=on_reset_module,
+            visual_container=visual_container,
         )
 
 DoubleRatchetModule = DoubleRatchetModule
