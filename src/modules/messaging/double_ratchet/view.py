@@ -17,8 +17,23 @@ def _build_party_panel(
     message_input: ft.TextField | None = None,
     on_send=None,
 ):
-    visible = is_party_visible(perspective, party.name)
     header = party.name if role_title is None else f"{role_title}: {party.name}"
+
+    if party.DHs is None:
+        return ft.Container(
+            content=ft.Column(
+                [
+                    ft.Text(header, size=18, weight="bold", text_align=ft.TextAlign.LEFT),
+                    ft.Text("Not initialized yet", color=ft.Colors.OUTLINE),
+                ],
+                spacing=4,
+                tight=True,
+            ),
+            width=SIDE_PANEL_WIDTH,
+            padding=10,
+        )
+
+    visible = is_party_visible(perspective, party.name)
     tooltips = get_tooltip_messages("double_ratchet")
 
     dhs_public_full = party.DHs.public if party.DHs is not None else "None"
@@ -68,7 +83,9 @@ def _build_used_keys_history_panel(page: ft.Page, party: PartyState, perspective
         ),
     ]
 
-    if not visible:
+    if party.DHs is None:
+        panel_controls.append(ft.Text("Not initialized yet", color=ft.Colors.OUTLINE))
+    elif not visible:
         panel_controls.append(ft.Text("Hidden", color=ft.Colors.OUTLINE))
     else:
         sections: list[tuple[str, list]] = [
@@ -421,6 +438,12 @@ def build_timeline(
             message_line = _resolve_message_line(
                 perspective_key, str(sender), str(receiver), cipher_text, plaintext_text
             )
+            
+            sender_view = perspective_key == sender.lower()
+            receiver_view = perspective_key == receiver.lower()
+            global_view = perspective_key == "global"
+
+            show_send_option = (global_view or sender_view) and perspective_key != "attacker"
 
             row_controls = [ft.Text(f"[{i}] {sender} → {receiver} | ")]
             if can_receive and on_receive_pending is not None:
@@ -432,6 +455,14 @@ def build_timeline(
                 )
             else:
                 row_controls.append(ft.Text("Pending"))
+            
+            if show_send_option and on_show_send_visualization is not None:
+                row_controls.append(
+                    ft.TextButton(
+                        "Show sending steps",
+                        on_click=lambda e, sid=seq_id: on_show_send_visualization(sid),
+                    )
+                )
 
             row = ft.Row(controls=row_controls, alignment=ft.MainAxisAlignment.START)
             col.controls.append(

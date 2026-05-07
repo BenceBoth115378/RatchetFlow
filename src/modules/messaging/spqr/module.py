@@ -77,6 +77,7 @@ class SPQRModule(MessagingBaseModule):
         self._pqxdh_alice_received_bob_reply: bool = False
         self._pending_show_alice_pqxdh_bootstrap: bool = True
         self._last_bob_bootstrap_info: dict[str, Any] | None = None
+        self._initial_warning_shown: bool = False
         self._send_steps: dict[int, dict[str, Any]] = {}
         self._receive_steps: dict[int, dict[str, Any]] = {}
         self._reset_session()
@@ -547,6 +548,34 @@ class SPQRModule(MessagingBaseModule):
             dialog.open = False
             page.update()
 
+        def show_initial_warning_with_bootstrap_option(message: str) -> None:
+            show_bootstrap_checkbox = ft.Checkbox(
+                label="Show Alice PQXDH steps after closing",
+                value=True,
+            )
+
+            def close_dialog(e):
+                dialog.open = False
+                page.update()
+                if show_bootstrap_checkbox.value and self._pending_show_alice_pqxdh_bootstrap:
+                    self._pending_show_alice_pqxdh_bootstrap = False
+                    show_alice_pqxdh_bootstrap_visualization()
+
+            dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text("Info"),
+                content=ft.Column(
+                    controls=[ft.Text(message), show_bootstrap_checkbox],
+                    tight=True,
+                    spacing=8,
+                ),
+                actions=[ft.TextButton("OK", on_click=close_dialog)],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+            page.overlay.append(dialog)
+            dialog.open = True
+            page.update()
+
         def _show_send_step(pending_id: int, on_close=None) -> None:
             step = self._send_steps.get(pending_id)
             if step is not None:
@@ -673,6 +702,7 @@ class SPQRModule(MessagingBaseModule):
             self._sync_bootstrap_from_app_state(app_state)
             refresh_view()
             page.update()
+            show_initial_warning_with_bootstrap_option("SPQR session reset with a fresh PQXDH bootstrap.")
 
         def show_alice_pqxdh_bootstrap_visualization() -> None:
             alice_state = self.session.alice
@@ -724,6 +754,12 @@ class SPQRModule(MessagingBaseModule):
 
         auto_receive_checkbox.on_change = on_auto_receive_changed
         refresh_view()
+        if not self._initial_warning_shown:
+            show_initial_warning_with_bootstrap_option(
+                "SPQR starts from a fresh PQXDH run. Alice already completed her steps; "
+                "Bob completes PQXDH bootstrap on his first receive."
+            )
+            self._initial_warning_shown = True
 
         return ft.Column(
             controls=[
