@@ -332,11 +332,9 @@ def build_visual(
 
     return ft.Row(
         controls=[
-            ft.Column(alice_controls, scroll=ft.ScrollMode.AUTO, expand=False),
-            ft.VerticalDivider(width=1),
+            ft.Column(alice_controls, expand=True, tight=False),
             ft.Column([timeline_container], expand=True),
-            ft.VerticalDivider(width=1),
-            ft.Column(bob_controls, scroll=ft.ScrollMode.AUTO, expand=False),
+            ft.Column(bob_controls, expand=True, tight=False),
         ],
         expand=True,
         vertical_alignment=ft.CrossAxisAlignment.START,

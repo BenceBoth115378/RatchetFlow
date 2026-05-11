@@ -348,14 +348,14 @@ def build_visual(
     return ft.Row(
         [
             ft.Container(
-                ft.Column(alice_controls, spacing=10, tight=False),
+                ft.Column(alice_controls, spacing=10, tight=False, expand=True),
                 width=SIDE_PANEL_WIDTH,
                 height=timeline_height,
                 padding=10,
             ),
             ft.Container(timeline_container, expand=True, padding=10),
             ft.Container(
-                ft.Column(bob_controls, spacing=10, tight=False),
+                ft.Column(bob_controls, spacing=10, tight=False, expand=True),
                 width=SIDE_PANEL_WIDTH,
                 height=timeline_height,
                 padding=10,

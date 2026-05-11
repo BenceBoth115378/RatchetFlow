@@ -42,6 +42,11 @@ def main(page: ft.Page):
     def refresh():
         main_container.controls.clear()
 
+        if app_state.current_module in {"double_ratchet", "spqr", "triple_ratchet"}:
+            page.scroll = None
+        else:
+            page.scroll = "auto"
+
         if not app_state.current_module:
             main_container.controls.append(
                 ft.Row(

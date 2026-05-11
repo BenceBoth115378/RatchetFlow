@@ -577,14 +577,14 @@ def build_visual(
     top_row = ft.Row(
         [
             ft.Container(
-                ft.Column(initializer_controls, spacing=10, tight=False),
+                ft.Column(initializer_controls, spacing=10, tight=False, expand=True),
                 width=SIDE_PANEL_WIDTH,
                 height=timeline_height,
                 padding=10,
             ),
             ft.Container(timeline_container, expand=True, padding=10),
             ft.Container(
-                ft.Column(responder_controls, spacing=10, tight=False),
+                ft.Column(responder_controls, spacing=10, tight=False, expand=True),
                 width=SIDE_PANEL_WIDTH,
                 height=timeline_height,
                 padding=10,
