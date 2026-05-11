@@ -786,10 +786,10 @@ def build_dr_receive_phase2_steps(
                     party_state_panel(
                         "Sender state",
                         [
-                            ("DHr", before_dhs_pub, tooltips.get("step_viz_receive_compare_dh", ""), before_dhs_pub_full),
+                            ("DHr", before_dhs_pub, tooltips.get("step_viz_receive_before_dhr", ""), before_dhs_pub_full),
                             ("DHs_pub", last_n_chars(header_dh_full, 8), tooltips.get("DHs_pub", ""), header_dh_full),
-                            ("RK", rk_after_kdf_rk1, tooltips.get("step_viz_receive_kdf_rk_1", ""), rk_after_kdf_rk1_full),
-                            ("CKs", ckr_after_double_ratchet, tooltips.get("step_viz_receive_kdf_rk_1", ""), ckr_after_double_ratchet_full),
+                            ("RK", rk_after_kdf_rk1, tooltips.get("step_viz_receive_after_rk", ""), rk_after_kdf_rk1_full),
+                            ("CKs", ckr_after_double_ratchet, tooltips.get("step_viz_receive_dh_ratchet_after_cks", ""), ckr_after_double_ratchet_full),
                         ],
                         synced_labels={"DHs_pub", "RK", "CKs"},
                     ),

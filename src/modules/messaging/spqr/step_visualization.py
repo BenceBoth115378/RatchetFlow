@@ -103,8 +103,7 @@ def _send_keys_unsampled(step_data: dict[str, Any], tooltips: dict[str, str]) ->
                     ft.Text("Generate key material", weight="bold"),
                     func_node(
                         "IncrementalKEM.KeyGen",
-                        "spqr_step_keygen_fn",
-                        full_value="Outputs: dk, ek_header, ek_vector",
+                        tooltip=_tt("spqr_step_keygen_fn"),
                     ),
                     ft.Text("↓", size=24),
                     ft.Row(
@@ -140,8 +139,7 @@ def _send_keys_unsampled(step_data: dict[str, Any], tooltips: dict[str, str]) ->
                     ft.Text("↓", size=24),
                     func_node(
                         "Authenticator.MacHdr",
-                        "spqr_step_machdr_fn",
-                        full_value="mac = MacHdr(auth, epoch, header)",
+                        tooltip=_tt("spqr_step_machdr_fn"),
                     ),
                     ft.Text("↓", size=24),
                     var_node("mac", tooltip=_tt("spqr_step_mac"), full_value=mac),
@@ -159,8 +157,7 @@ def _send_keys_unsampled(step_data: dict[str, Any], tooltips: dict[str, str]) ->
                     ft.Text("↓", size=24),
                     func_node(
                         "new Encoder",
-                        "spqr_step_encode_fn",
-                        full_value="header_encoder = Encode(header || mac)",
+                        tooltip=_tt("spqr_step_encode_fn"),
                     ),
                     ft.Text("↓", size=24),
                     var_node(
@@ -173,8 +170,7 @@ def _send_keys_unsampled(step_data: dict[str, Any], tooltips: dict[str, str]) ->
                     ft.Divider(height=1),
                     func_node(
                         "Encoder.next_chunk",
-                        "spqr_step_next_chunk",
-                        full_value="chunk = header_encoder.next_chunk()",
+                        tooltip=_tt("spqr_step_next_chunk"),
                     ),
                     ft.Text("↓", size=24),
                     var_node("Header chunk", tooltip=_tt("spqr_step_chunk"), full_value=chunk),
@@ -367,8 +363,7 @@ def _send_header_received(step_data: dict[str, Any], tooltips: dict[str, str]) -
                     ft.Text("↓", size=24),
                     func_node(
                         "IncrementalKEM.Encaps1",
-                        "spqr_step_keygen_fn",
-                        full_value="encaps_secret, ct1, ss = Encaps1(ek_header)",
+                        tooltip=_tt("spqr_step_keygen_fn"),
                     ),
                     ft.Text("↓", size=24),
                     ft.Row(
@@ -394,7 +389,7 @@ def _send_header_received(step_data: dict[str, Any], tooltips: dict[str, str]) -
                     ft.Text("Derive output key", weight="bold"),
                     ft.Row(
                         controls=[
-                            var_node("ss", tooltip=_tt("spqr_step_ss"), full_value="ss_from_encaps1_value"),
+                            var_node("ss", tooltip=_tt("spqr_step_ss"), full_value=encrypt_trace.get("raw_ss")),
                             var_node("epoch", tooltip=_tt("spqr_step_epoch"), full_value=ctx["msg_epoch"]),
                         ],
                         alignment=ft.MainAxisAlignment.CENTER,
@@ -404,8 +399,7 @@ def _send_header_received(step_data: dict[str, Any], tooltips: dict[str, str]) -
                     ft.Text("↓", size=24),
                     func_node(
                         "KDF_OK",
-                        "spqr_step_kdf_ok",
-                        full_value="KDF_OK(ss, epoch)",
+                        tooltip=_tt("spqr_step_kdf_ok"),
                     ),
                     ft.Text("↓", size=24),
                     var_node("SS (output_key)",
@@ -426,7 +420,7 @@ def _send_header_received(step_data: dict[str, Any], tooltips: dict[str, str]) -
                         controls=[
                             var_node("auth", full_value=auth, tooltip=_tt("spqr_step_auth")),
                             var_node("epoch", full_value=ctx["msg_epoch"], tooltip=_tt("spqr_step_epoch")),
-                            var_node("ss", full_value="ss_from_kdf_ok_value", tooltip=_tt("spqr_step_ss_after_kdf")),
+                            var_node("ss", full_value=output_key, tooltip=_tt("spqr_step_ss_after_kdf")),
                         ],
                         alignment=ft.MainAxisAlignment.CENTER,
                         spacing=16,
@@ -435,8 +429,7 @@ def _send_header_received(step_data: dict[str, Any], tooltips: dict[str, str]) -
                     ft.Text("↓", size=24),
                     func_node(
                         "Authenticator.Update",
-                        "spqr_step_machdr_fn",
-                        full_value="Authenticator.Update(auth, epoch, ss)",
+                        tooltip=_tt("spqr_step_machdr_fn"),
                     ),
                 ],
                 spacing=6,
@@ -452,8 +445,7 @@ def _send_header_received(step_data: dict[str, Any], tooltips: dict[str, str]) -
                     ft.Text("↓", size=24),
                     func_node(
                         "Encode",
-                        "spqr_step_encode_fn",
-                        full_value="ct1_encoder = Encode(ct1)",
+                        tooltip=_tt("spqr_step_encode_fn"),
                     ),
                     ft.Text("↓", size=24),
                     var_node(
@@ -467,8 +459,7 @@ def _send_header_received(step_data: dict[str, Any], tooltips: dict[str, str]) -
                     ft.Divider(height=1),
                     func_node(
                         "Encoder.next_chunk",
-                        "spqr_step_next_chunk",
-                        full_value="chunk = ct1_encoder.next_chunk()",
+                        tooltip=_tt("spqr_step_next_chunk"),
                     ),
                     ft.Text("↓", size=24),
                     var_node("chunk", full_value=ctx["chunk"], tooltip=_tt("spqr_step_chunk")),
@@ -763,8 +754,7 @@ def _build_rk_derivation_step(
                 ft.Text("↓", size=24),
                 func_node(
                     "KDF_SCKA_RK",
-                    "spqr_step_key_evolution",
-                    full_value="new_RK, new_CKs, new_CKr = KDF_SCKA_RK(RK, SCKA_output_key)",
+                    tooltip=_tt("spqr_step_key_evolution"),
                 ),
                 ft.Text("↓", size=24),
                 ft.Row(
@@ -840,7 +830,7 @@ def _receive_keys_sampled(step_data: dict[str, Any], tooltips: dict[str, str]) -
                     ft.Text("↓", size=24),
                     var_node(label="Condition", value="msg.epoch == self.epoch and msg.type == Ct1", width=420, tooltip=_tt("spqr_step_state_op"), full_value=condition_met),
                     ft.Text("↓", size=24),
-                    func_node("new Decoder()",),
+                    func_node("new Decoder()", tooltip=_tt("spqr_step_decoder_init")),
                     ft.Text("↓", size=24),
                     var_node(
                         label="ct1_decoder",
@@ -860,7 +850,7 @@ def _receive_keys_sampled(step_data: dict[str, Any], tooltips: dict[str, str]) -
                     ft.Text("chunk -> Decoder add chunk", weight="bold"),
                     var_node("msg.data - Chunk", full_value=chunk, tooltip=_tt("spqr_step_chunk")),
                     ft.Text("↓", size=24),
-                    func_node("Decoder.add_chunk", full_value="ct1_decoder.add_chunk(chunk)"),
+                    func_node("Decoder.add_chunk", tooltip=_tt("spqr_step_decoder_add_chunk")),
                 ],
                 spacing=6,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -875,7 +865,7 @@ def _receive_keys_sampled(step_data: dict[str, Any], tooltips: dict[str, str]) -
                     ft.Text("↓", size=24),
                     func_node(
                         "new Encoder()",
-                        "spqr_step_encode_fn",
+                        tooltip=_tt("spqr_step_encode_fn"),
                     ),
                     ft.Text("↓", size=24),
                         var_node(
@@ -927,7 +917,7 @@ def _receive_header_sent(step_data: dict[str, Any], tooltips: dict[str, str]) ->
                         wrap=True,
                     ),
                     ft.Text("↓", size=24),
-                    func_node("Decoder.add_chunk", full_value="ct1_decoder.add_chunk(chunk)"),
+                    func_node("Decoder.add_chunk", tooltip=_tt("spqr_step_decoder_add_chunk")),
                 ],
                 spacing=6,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -938,7 +928,7 @@ def _receive_header_sent(step_data: dict[str, Any], tooltips: dict[str, str]) ->
             "control": ft.Column(
                 controls=[
                     ft.Text("Decoder has message()", weight="bold"),
-                    func_node("Decoder.has_message", full_value="ct1_decoder.has_message()"),
+                    func_node("Decoder.has_message", tooltip=_tt("spqr_step_decoder_has_message")),
                     ft.Text("↓", size=24),
                     var_node(label="has_message", value=("yes" if has_message else "no"), width=220, tooltip=_tt("spqr_step_state_op"), full_value=has_message),
                     ft.Text("↓", size=24),
@@ -994,7 +984,7 @@ def _receive_no_header_received(step_data: dict[str, Any], tooltips: dict[str, s
                     ft.Text("↓", size=24),
                     var_node("chunk", full_value=chunk, tooltip=_tt("spqr_step_chunk")),
                     ft.Text("↓", size=24),
-                    func_node("Decoder.add_chunk", full_value="header_decoder.add_chunk(chunk)"),
+                    func_node("Decoder.add_chunk", tooltip=_tt("spqr_step_decoder_add_chunk")),
                     ft.Text("↓", size=24),
                     var_node("header with MAC", full_value=header_with_mac, tooltip=_tt("spqr_step_header_with_mac")),
                 ],
@@ -1114,7 +1104,7 @@ def _receive_ct1_sampled(step_data: dict[str, Any], tooltips: dict[str, str]) ->
                         ft.Text("Add EK chunk", weight="bold"),
                         var_node("chunk", full_value=chunk, tooltip=_tt("spqr_step_chunk")),
                         ft.Text("↓", size=24),
-                        func_node("ek_decoder.add_chunk", full_value="ek_decoder.add_chunk(chunk)"),
+                        func_node("ek_decoder.add_chunk", tooltip=_tt("spqr_step_decoder_add_chunk")),
                     ],
                     spacing=6,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1187,8 +1177,7 @@ def _receive_ct1_sampled(step_data: dict[str, Any], tooltips: dict[str, str]) ->
                         ft.Text("↓", size=24),
                         func_node(
                             "ek_decoder.add_chunk",
-                       
-                            full_value="ek_decoder.add_chunk(chunk)",
+                            tooltip=_tt("spqr_step_decoder_add_chunk"),
                         ),
                     ],
                     spacing=6,
@@ -1271,7 +1260,7 @@ def _receive_ek_received_ct1_sampled(step_data: dict[str, Any], tooltips: dict[s
                         full_value=step_data.get("header").msg.to_dict() if isinstance(step_data.get("header"), SpqrHeader) else None,
                     ),
                     ft.Text("↓", size=24),
-                    func_node("Encaps2 + MacCt", full_value="ct2 = Encaps2(...); mac = MacCt(...)"),
+                    func_node("Encaps2 + MacCt", tooltip=_tt("spqr_step_encaps2_macct")),
                     ft.Text("↓", size=24),
                     func_node(
                         "state",
@@ -1319,7 +1308,7 @@ def _receive_ct1_acknowledged(step_data: dict[str, Any], tooltips: dict[str, str
                     ft.Text("↓", size=24),
                     var_node("chunk", full_value=chunk, tooltip=_tt("spqr_step_chunk")),
                     ft.Text("↓", size=24),
-                    func_node("ek_decoder.add_chunk", full_value="ek_decoder.add_chunk(chunk)"),
+                    func_node("ek_decoder.add_chunk", tooltip=_tt("spqr_step_decoder_add_chunk")),
                     ft.Text("↓", size=24),
                     var_node(
                         label="has_message",
@@ -1422,7 +1411,7 @@ def _receive_ct1_received(step_data: dict[str, Any], tooltips: dict[str, str]) -
                     ft.Text("↓", size=24),
                     var_node("chunk", full_value=chunk, tooltip=_tt("spqr_step_chunk")),
                     ft.Text("↓", size=24),
-                    func_node("ct2_decoder = Decoder_new(CT2_SIZE + MAC_SIZE)", full_value="ct2_decoder = Decoder_new(CT2_SIZE + MAC_SIZE)"),
+                    func_node("ct2_decoder = Decoder_new(CT2_SIZE + MAC_SIZE)", tooltip=_tt("spqr_step_decoder_init")),
                 ],
                 spacing=6,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1433,7 +1422,7 @@ def _receive_ct1_received(step_data: dict[str, Any], tooltips: dict[str, str]) -
             "control": ft.Column(
                 controls=[
                     ft.Text("Add CT2 chunk", weight="bold"),
-                    func_node("ct2_decoder.add_chunk", full_value="ct2_decoder.add_chunk(chunk)"),
+                    func_node("ct2_decoder.add_chunk", tooltip=_tt("spqr_step_decoder_add_chunk")),
                     ft.Text("↓", size=24),
                     func_node(
                         "state transition",
@@ -1482,7 +1471,7 @@ def _receive_ek_sent_ct1_received(step_data: dict[str, Any], tooltips: dict[str,
                     ft.Text("↓", size=24),
                     var_node("chunk", full_value=chunk, tooltip=_tt("spqr_step_chunk")),
                     ft.Text("↓", size=24),
-                    func_node("ct2_decoder.add_chunk", full_value="ct2_decoder.add_chunk(chunk)"),
+                    func_node("ct2_decoder.add_chunk", tooltip=_tt("spqr_step_decoder_add_chunk")),
                 ],
                 spacing=6,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1573,7 +1562,7 @@ def _build_send_message_pipeline_phase2_steps(step_data: dict[str, Any], tooltip
                     ft.Text("Message key derivation", weight="bold"),
                     var_node("sending_epoch", full_value=sending_epoch, tooltip=_tt("spqr_step_sending_epoch")),
                     ft.Text("↓", size=24),
-                    func_node("Get sending chain", f"epoch {sending_epoch}"),
+                    func_node("Get sending chain", f"epoch {sending_epoch}", tooltip=_tt("spqr_step_get_sending_chain")),
                     ft.Text("↓", size=24),
                     var_node("CKs", full_value=chain_key_before, tooltip=_tt("spqr_step_send_ck")),
                     ft.Divider(height=1),
@@ -1587,7 +1576,7 @@ def _build_send_message_pipeline_phase2_steps(step_data: dict[str, Any], tooltip
                         wrap=True,
                     ),
                     ft.Text("↓", size=24),
-                    func_node("KDF_SCKA_CK", "spqr_step_kdf_scka_ck"),
+                    func_node("KDF_SCKA_CK", tooltip=_tt("spqr_step_kdf_scka_ck")),
                     ft.Text("↓", size=24),
                     ft.Row(
                         controls=[
@@ -1623,8 +1612,7 @@ def _build_send_message_pipeline_phase2_steps(step_data: dict[str, Any], tooltip
                     ft.Text("↓", size=24),
                     func_node(
                         "Build SpqrHeader",
-                        "spqr_step_build_message",
-                        full_value="header = SpqrHeader(msg=msg, n=n)",
+                        tooltip=_tt("spqr_step_build_message"),
                     ),
                     ft.Text("↓", size=24),
                     var_node(
@@ -1672,7 +1660,7 @@ def _build_send_phase2_5_pqxdh_steps(step_data: dict[str, Any], tooltips: dict[s
                         wrap=True,
                     ),
                     ft.Text("↓", size=24),
-                    func_node("CONCAT"),
+                    func_node("CONCAT", tooltip=_tt("spqr_step_concat_fn")),
                     ft.Text("↓", size=24),
                     var_node(label="Header including PQXDH data", value=combined_header_preview, width=620, height=110, full_value=combined_header_full, tooltip=_tt("pqxdh_step_node_verify_pq")),
                 ],
@@ -1710,8 +1698,7 @@ def _build_send_message_pipeline_phase3_steps(step_data: dict[str, Any], tooltip
                     ft.Text("↓", size=24),
                     func_node(
                         "Encrypt",
-                        "spqr_step_build_message",
-                        full_value="ciphertext = ENCRYPT(mk, plaintext, AD || header)",
+                        tooltip=_tt("spqr_step_build_message"),
                     ),
                     ft.Text("↓", size=24),
                     var_node("ciphertext", full_value=ciphertext, tooltip=_tt("spqr_step_msg_data")),
@@ -1757,7 +1744,6 @@ def _build_receive_message_pipeline_phase2_steps(step_data: dict[str, Any], tool
                         f"epoch {receiving_epoch}",
                         width=260,
                         tooltip=_tt("spqr_step_recv_ck"),
-                        full_value={"epoch": receiving_epoch},
                     ),
                     ft.Text("↓", size=24),
                     var_node(
@@ -1778,7 +1764,7 @@ def _build_receive_message_pipeline_phase2_steps(step_data: dict[str, Any], tool
                         wrap=True,
                     ),
                     ft.Text("↓", size=24),
-                    func_node("KDF_SCKA_CK", "spqr_step_kdf_scka_ck"),
+                    func_node("KDF_SCKA_CK", tooltip=_tt("spqr_step_kdf_scka_ck")),
                     ft.Text("↓", size=24),
                     ft.Row(
                         controls=[
@@ -1823,8 +1809,7 @@ def _build_receive_message_pipeline_phase3_steps(step_data: dict[str, Any], tool
                     ft.Text("↓", size=24),
                     func_node(
                         "Decrypt",
-                        "spqr_step_build_message",
-                        full_value="plaintext = DECRYPT(mk, ciphertext, AD || header)",
+                        tooltip=_tt("spqr_step_build_message"),
                     ),
                     ft.Text("↓", size=24),
                     var_node("plaintext", full_value=format_plaintext(decrypted), tooltip=_tt("spqr_step_chunk")),
@@ -2008,7 +1993,7 @@ def build_alice_pqxdh_phase1_steps(
                 wrap=True,
             ),
             ft.Text("↓", size=20),
-            func_node("VERIFY_EC", "spqr_step_state_op", full_value="Verify EC signature"),
+            func_node("VERIFY_EC", tooltip=_tt("spqr_step_state_op")),
             ft.Text("↓", size=20),
             var_node(label="Verification result", value="Valid signature", width=200, tooltip=_tt("spqr_step_state_op"), full_value="Valid signature"),
         ],
@@ -2029,7 +2014,7 @@ def build_alice_pqxdh_phase1_steps(
                 wrap=True,
             ),
             ft.Text("↓", size=20),
-            func_node("VERIFY_PQ", "spqr_step_state_op", full_value="Verify PQ signature"),
+            func_node("VERIFY_PQ", tooltip=_tt("spqr_step_state_op")),
             ft.Text("↓", size=20),
             var_node(label="Verification result", value="Valid signature", width=200, tooltip=_tt("spqr_step_state_op"), full_value="Valid signature"),
         ],
@@ -2044,7 +2029,7 @@ def build_alice_pqxdh_phase1_steps(
             ft.Text("3) Alice encapsulates PQ prekey material", weight="bold"),
             var_node("PQPKB", full_value=pqpkb_pub, tooltip=_tt("x3dh_step_key_pqspk_pub")),
             ft.Text("↓", size=20),
-            func_node("PQKEM.Encaps", "spqr_step_state_op", full_value="PQPKB -> encaps -> CT, SS"),
+            func_node("PQKEM.Encaps", tooltip=_tt("spqr_step_state_op")),
             ft.Text("↓", size=20),
             ft.Row(
                 controls=[
@@ -2065,8 +2050,8 @@ def build_alice_pqxdh_phase1_steps(
             ft.Text("4) Alice derives shared secret SK", weight="bold"),
             ft.Row(
                 controls=[
-                    func_node("DH1", "spqr_step_state_op", full_value="DH(IKA_priv, SPK_B)"),
-                    func_node("DH2", "spqr_step_state_op", full_value="DH(EKA_priv, IK_B)"),
+                    func_node("DH1", tooltip=_tt("spqr_step_state_op")),
+                    func_node("DH2", tooltip=_tt("spqr_step_state_op")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
@@ -2074,8 +2059,8 @@ def build_alice_pqxdh_phase1_steps(
             ),
             ft.Row(
                 controls=[
-                    func_node("DH3", "spqr_step_state_op", full_value="DH(EKA_priv, SPK_B)"),
-                    func_node("DH4", "spqr_step_state_op", full_value="DH(EKA_priv, OPK_B)"),
+                    func_node("DH3", tooltip=_tt("spqr_step_state_op")),
+                    func_node("DH4", tooltip=_tt("spqr_step_state_op")),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=12,
@@ -2083,7 +2068,7 @@ def build_alice_pqxdh_phase1_steps(
             ),
             var_node("SS (from PQKEM)", full_value=pq_shared_secret, tooltip=tooltips.get("pqxdh_step_key_ss", "")),
             ft.Text("↓", size=20),
-            func_node("KDF_SK", "spqr_step_state_op", full_value="KDF_SK(DH1 || DH2 || DH3 || DH4 || SS)"),
+            func_node("KDF_SK", tooltip=_tt("spqr_step_state_op")),
             ft.Text("↓", size=20),
             var_node("SK", full_value=shared_secret, tooltip=tooltips.get("pqxdh_step_key_ss", "")),
         ],
@@ -2104,7 +2089,7 @@ def build_alice_pqxdh_phase1_steps(
                 wrap=True,
             ),
             ft.Text("↓", size=20),
-            func_node("CALC_AD", "spqr_step_state_op", full_value="IK_A, IK_B -> CALC_AD"),
+            func_node("CALC_AD", tooltip=_tt("spqr_step_state_op")),
             ft.Text("↓", size=20),
             var_node("AD", full_value=associated_data, tooltip=tooltips.get("pqxdh_step_key_ad", "")),
             ft.Divider(height=1),
@@ -2145,7 +2130,7 @@ def build_alice_pqxdh_phase2_steps(
             ft.Text("6) Initialize Alice SPQR session state", weight="bold"),
             var_node("SK", full_value=shared_secret, tooltip=tooltips.get("pqxdh_step_key_ss", "")),
             ft.Text("↓", size=20),
-            func_node("RatchetInitAliceSCKA(SK)", "spqr_step_state_op", full_value="Initialize ratchet state"),
+            func_node("RatchetInitAliceSCKA(SK)", tooltip=_tt("spqr_step_state_op")),
             ft.Text("↓", size=20),
             ft.Row(
                 controls=[
@@ -2229,7 +2214,7 @@ def build_bob_pqxdh_phase1_steps(
                 tooltip=tooltips.get("pqxdh_step_node_verify_pq", ""),
             ),
             ft.Text("↓", size=24),
-            func_node("Extract components", full_value="Extract ik_a, ek_a, bob_spk, pq_id, CT"),
+            func_node("Extract components", tooltip=_tt("spqr_step_extract_components")),
         ],
         spacing=6,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -2248,7 +2233,7 @@ def build_bob_pqxdh_phase1_steps(
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            func_node( "PQKEM.Decaps",full_value="CT + Bob_pq_privkey -> SS"),
+            func_node("PQKEM.Decaps", tooltip=_tt("spqr_step_pqkem_decaps")),
             ft.Text("↓", size=24),
             var_node("SS (PQ shared secret)", full_value=pq_shared_secret, tooltip=tooltips.get("pqxdh_step_key_ss", "")),
         ],
@@ -2279,7 +2264,7 @@ def build_bob_pqxdh_phase1_steps(
             ),
             var_node("SS (from PQKEM)", full_value=pq_shared_secret, tooltip=tooltips.get("pqxdh_step_key_ss", "")),
             ft.Text("↓", size=24),
-            func_node("KDF_SK", full_value="KDF_SK(DH1 || DH2 || DH3 || DH4 || SS)"),
+            func_node("KDF_SK", tooltip=_tt("spqr_step_kdf_sk_pqxdh")),
             ft.Text("↓", size=24),
             var_node("SK", full_value=shared_secret, tooltip=tooltips.get("pqxdh_step_key_ss", "")),
         ],
@@ -2300,7 +2285,7 @@ def build_bob_pqxdh_phase1_steps(
                 wrap=True,
             ),
             ft.Text("↓", size=24),
-            func_node("CALC_AD", "spqr_step_state_op", full_value="IK_A, IK_B -> CALC_AD"),
+            func_node("CALC_AD", tooltip=_tt("spqr_step_state_op")),
             ft.Text("↓", size=24),
             var_node("AD", full_value=session_ad, tooltip=tooltips.get("pqxdh_step_key_ad", "")),
         ],
@@ -2334,7 +2319,7 @@ def build_bob_pqxdh_phase2_steps(
             ft.Text("5) Initialize Bob SCKA state", weight="bold"),
             var_node("SK", full_value=shared_secret, tooltip=tooltips.get("pqxdh_step_key_ss", "")),
             ft.Text("↓", size=20),
-            func_node("RatchetInitBobSCKA",full_value="RatchetInitBobSCKA(SK, AD)"),
+            func_node("RatchetInitBobSCKA", tooltip=_tt("spqr_step_ratchet_init_bob")),
             ft.Text("↓", size=24),
             ft.Row(
                 controls=[

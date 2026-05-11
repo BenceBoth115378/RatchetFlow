@@ -64,7 +64,7 @@ def _build_party_panel(
         ft.Text(f"Direction: {state.direction}"),
         ft.Text(f"Epoch: {state.epoch}"),
         ft.Text(f"SCKA state: {state_name}"),
-        build_key_field(page, visible, "RK", rk_full, tooltips.get("RK", "")),
+        build_key_field(page, visible, "RK", rk_full, tooltips.get("spqr_step_rk", "")),
         build_key_field(page, visible, "CK_send", send_ck, tooltips.get("CK_send", "")),
         build_key_field(page, visible, "CK_recv", recv_ck, tooltips.get("CK_recv", "")),
         ft.Text(f"Skipped MK epochs: {len(state.MKSKIPPED)}"),

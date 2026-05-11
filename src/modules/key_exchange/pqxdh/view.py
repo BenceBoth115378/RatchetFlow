@@ -442,7 +442,7 @@ def build_visual(
     is_phase1_done: bool,
     is_phase2_done: bool,
 ) -> ft.Control:
-    tooltips = get_tooltip_messages("pqxdh")
+    tooltips = {**get_tooltip_messages("x3dh"), **get_tooltip_messages("pqxdh")}
 
     header_controls: list[ft.Control] = [
         ft.Row(
