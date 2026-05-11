@@ -4,19 +4,14 @@ import flet as ft
 
 from components.data_classes import SpqrSessionState, SpqrRatchetState
 from modules.base_view import format_key
-from modules.messaging.messaging_base_view import is_party_visible, build_key_field, get_key_tooltip_text, SIDE_PANEL_WIDTH, safe_decode_bytes
+from modules.messaging.messaging_base_view import (
+    is_party_visible, build_key_field, get_key_tooltip_text, SIDE_PANEL_WIDTH,
+    build_timeline_column, collect_timeline_items, pqxdh_header_preview, find_bob_pqxdh_header,
+    build_timeline_entry, build_received_row_controls, build_pending_row_controls,
+    resolve_received_body, resolve_pending_body, append_pqxdh_bootstrap_buttons,
+)
 from modules.tooltip_helpers import get_tooltip_messages
 
-
-def _pqxdh_header_preview(pqxdh_header: dict | None) -> str:
-    if not isinstance(pqxdh_header, dict):
-        return ""
-
-    ik_a = str(pqxdh_header.get("ik_a_public", ""))
-    ek_a = str(pqxdh_header.get("ek_a_public", ""))
-    bob_spk = str(pqxdh_header.get("bob_spk_public", ""))
-    pq_prekey_id = pqxdh_header.get("bob_pq_prekey_id")
-    return f"ik_a={ik_a[-8:]}, ek_a={ek_a[-8:]}, spk_b={bob_spk[-8:]}, pq_id={pq_prekey_id}"
 
 
 def _active_chain_values(state: SpqrRatchetState | None) -> tuple[str, str]:
@@ -149,141 +144,31 @@ def build_timeline(
     on_show_bob_pqxdh_bootstrap=None,
 ) -> ft.Control:
     perspective_key = perspective.lower()
-    col = ft.Column(
-        [
-            ft.Row([ft.Text("Message Timeline", weight="bold")], alignment=ft.MainAxisAlignment.CENTER),
-        ],
-        scroll=ft.ScrollMode.ALWAYS,
-        expand=True,
-        spacing=6,
-    )
+    col = build_timeline_column()
+    bob_pqxdh_header = find_bob_pqxdh_header(session.message_log)
 
-    items: list[tuple[int, str, object]] = []
-    for message in session.message_log:
-        items.append((message.seq_id, "received", message))
-    if pending_messages is not None:
-        for pending in pending_messages:
-            if isinstance(pending.get("id"), int):
-                items.append((pending["id"], "pending", pending))
-
-    bob_initialized = session.bob is not None
-    bob_pqxdh_header: dict | None = None
-    for message in session.message_log:
-        header_candidate = getattr(message, "pqxdh_header", None)
-        receiver_name = getattr(message, "receiver", "")
-        if isinstance(header_candidate, dict) and str(receiver_name).lower() == "bob":
-            bob_pqxdh_header = header_candidate
-            break
-
-    for seq_id, kind, entry in sorted(items, key=lambda item: item[0], reverse=True):
+    for seq_id, kind, entry in sorted(
+        collect_timeline_items(session.message_log, pending_messages),
+        key=lambda item: item[0], reverse=True,
+    ):
         if kind == "received":
             sender = entry.sender
             receiver = entry.receiver
             header = entry.header
-            sender_view = perspective_key in {"global", sender.lower()}
-            receiver_view = perspective_key == receiver.lower()
-            body = safe_decode_bytes(entry.plaintext if sender_view else entry.decrypted_by_receiver)
-            if not body and receiver_view:
-                body = safe_decode_bytes(entry.decrypted_by_receiver)
-            if not body:
-                body = safe_decode_bytes(entry.cipher)
-
-            row_controls: list[ft.Control] = [ft.Text(f"[{seq_id}] {sender} -> {receiver} | ")]
-            if on_show_send_visualization is not None:
-                row_controls.append(
-                    ft.TextButton("Send steps", on_click=lambda e, sid=seq_id: on_show_send_visualization(sid))
-                )
-            if on_show_receive_visualization is not None:
-                row_controls.append(
-                    ft.TextButton("Receive steps", on_click=lambda e, sid=seq_id: on_show_receive_visualization(sid))
-                )
-
-            header_text = ""
-            if header is not None:
-                header_text = f"epoch={header.msg.epoch}, type={header.msg.msg_type.value}, n={header.n}"
-            pqxdh_text = _pqxdh_header_preview(getattr(entry, "pqxdh_header", None))
-            pqxdh_line = ft.Text(f"pqxdh: {pqxdh_text}") if pqxdh_text else None
-            col.controls.append(
-                ft.Container(
-                    content=ft.Column(
-                        [
-                            ft.Row(row_controls),
-                            ft.Text(f"header: {header_text}"),
-                            *( [pqxdh_line] if pqxdh_line else [] ),
-                            ft.Text(f"message: {body}"),
-                        ],
-                        spacing=2,
-                        tight=True,
-                    ),
-                    padding=6,
-                    border_radius=5,
-                )
-            )
-            continue
-
-        pending = entry
-        sender = str(pending.get("sender", ""))
-        receiver = str(pending.get("receiver", ""))
-        header = pending.get("header")
-        cipher = pending.get("cipher", b"")
-        plaintext = pending.get("plaintext", b"")
-        can_receive = perspective_key in {"global", receiver.lower()}
-        row_controls: list[ft.Control] = [ft.Text(f"[{seq_id}] {sender} -> {receiver} | ")]
-        if can_receive and on_receive_pending is not None:
-            row_controls.append(
-                ft.TextButton("Receive", on_click=lambda e, pid=seq_id, who=receiver: on_receive_pending(who, pid))
-            )
+            header_text = f"epoch={header.msg.epoch}, type={header.msg.msg_type.value}, n={header.n}" if header is not None else ""
+            body = resolve_received_body(perspective_key, sender, entry.plaintext, entry.decrypted_by_receiver, entry.cipher)
+            row_controls = build_received_row_controls(seq_id, sender, receiver, on_show_send_visualization, on_show_receive_visualization)
+            col.controls.append(build_timeline_entry(row_controls, header_text, body, pqxdh_header_preview(getattr(entry, "pqxdh_header", None))))
         else:
-            row_controls.append(ft.Text("Pending"))
+            sender = str(entry.get("sender", ""))
+            receiver = str(entry.get("receiver", ""))
+            header = entry.get("header")
+            header_text = f"epoch={header.msg.epoch}, type={header.msg.msg_type.value}, n={header.n}" if header is not None else ""
+            body = resolve_pending_body(perspective_key, sender, entry.get("plaintext", b""), entry.get("cipher", b""))
+            row_controls = build_pending_row_controls(seq_id, sender, receiver, perspective_key, on_receive_pending, on_show_send_visualization)
+            col.controls.append(build_timeline_entry(row_controls, header_text, body, pqxdh_header_preview(entry.get("pqxdh_header")), ft.Border.all(1, ft.Colors.OUTLINE_VARIANT)))
 
-        if on_show_send_visualization is not None:
-            row_controls.append(
-                ft.TextButton("Send steps", on_click=lambda e, sid=seq_id: on_show_send_visualization(sid))
-            )
-
-        header_text = ""
-        if header is not None:
-            header_text = f"epoch={header.msg.epoch}, type={header.msg.msg_type.value}, n={header.n}"
-
-        pqxdh_header = pending.get("pqxdh_header") if isinstance(pending.get("pqxdh_header"), dict) else None
-        pqxdh_text = _pqxdh_header_preview(pqxdh_header)
-
-        body = safe_decode_bytes(plaintext if perspective_key in {"global", sender.lower()} else cipher)
-        pqxdh_line = ft.Text(f"pqxdh: {pqxdh_text}") if pqxdh_text else None
-        col.controls.append(
-            ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Row(row_controls),
-                        ft.Text(f"header: {header_text}"),
-                        *( [pqxdh_line] if pqxdh_line else [] ),
-                        ft.Text(f"message: {body}"),
-                    ],
-                    spacing=2,
-                    tight=True,
-                ),
-                padding=6,
-                border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
-                border_radius=5,
-            )
-        )
-
-    bottom_actions: list[ft.Control] = []
-    if on_show_alice_pqxdh_bootstrap is not None and session.alice is not None and perspective_key in {"global", "alice"}:
-        bottom_actions.append(
-            ft.TextButton("Show Alice PQXDH initialization", on_click=lambda e: on_show_alice_pqxdh_bootstrap())
-        )
-    if on_show_bob_pqxdh_bootstrap is not None and bob_initialized and bob_pqxdh_header is not None and perspective_key in {"global", "bob"}:
-        bottom_actions.append(
-            ft.TextButton(
-                "Show Bob PQXDH initialization",
-                on_click=lambda e, header=bob_pqxdh_header: on_show_bob_pqxdh_bootstrap(header),
-            )
-        )
-    if bottom_actions:
-        col.controls.append(ft.Divider(height=8))
-        col.controls.extend(bottom_actions)
-
+    append_pqxdh_bootstrap_buttons(col, session.alice, session.bob is not None, bob_pqxdh_header, perspective_key, on_show_alice_pqxdh_bootstrap, on_show_bob_pqxdh_bootstrap)
     return col
 
 

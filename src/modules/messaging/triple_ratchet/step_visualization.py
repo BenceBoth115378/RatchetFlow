@@ -150,7 +150,6 @@ def _build_key_combination_step(
 
 def _build_dr_receiving_step(snapshot: TripleRatchetReceiveSnapshot, page: ft.Page, on_close: Callable[[], None] | None = None) -> dict[str, Any]:
     from modules.messaging.double_ratchet.step_visualization import build_dr_receive_phase2_steps
-    from modules.tooltip_helpers import get_tooltip_messages
 
     dr = snapshot.header.dr
     dr_preview = f"dh={last_n_chars(dr.dh)}, pn={dr.pn}, n={dr.n}"
@@ -158,8 +157,7 @@ def _build_dr_receiving_step(snapshot: TripleRatchetReceiveSnapshot, page: ft.Pa
     def show_dr_visualization() -> None:
         if snapshot.dr_snapshot is None:
             return
-        tooltips = get_tooltip_messages("double_ratchet")
-        steps = build_dr_receive_phase2_steps(snapshot.dr_snapshot, tooltips)
+        steps = build_dr_receive_phase2_steps(snapshot.dr_snapshot)
         normalize_step_titles(steps)
         show_step_dialog(page, "DR receiving steps", steps, on_close=None)
 
@@ -187,7 +185,6 @@ def _build_dr_receiving_step(snapshot: TripleRatchetReceiveSnapshot, page: ft.Pa
 
 def _build_dr_sending_step(snapshot: TripleRatchetSendSnapshot, page: ft.Page, on_close: Callable[[], None] | None = None) -> dict[str, Any]:
     from modules.messaging.double_ratchet.step_visualization import build_dr_send_phase2_steps
-    from modules.tooltip_helpers import get_tooltip_messages
 
     dr = snapshot.header.dr
     dr_preview = f"dh={last_n_chars(dr.dh)}, pn={dr.pn}, n={dr.n}"
@@ -226,8 +223,7 @@ def _build_dr_sending_step(snapshot: TripleRatchetSendSnapshot, page: ft.Page, o
             before=dr_before,
             after=dr_after,
         )
-        tooltips = get_tooltip_messages("double_ratchet")
-        steps = build_dr_send_phase2_steps(dr_snapshot_inner, tooltips)
+        steps = build_dr_send_phase2_steps(dr_snapshot_inner)
         normalize_step_titles(steps)
         show_step_dialog(page, "DR sending steps", steps, on_close=None)
 
@@ -671,11 +667,9 @@ def show_alice_pqxdh_bootstrap_visualization_dialog(
             if isinstance(last_bundle, dict):
                 bob_ik_pub = last_bundle.get("identity_dh_public", "")
 
-        tooltips_dr = get_tooltip_messages("x3dh")
         steps.extend(build_alice_x3dh_phase2_steps(
             sk_dr.hex(), dr_rk_after_init, dr_cks_after_init,
             alice_dhs_pub, alice_dhs_priv, bob_ik_pub,
-            tooltips_dr
         ))
 
     # Phase 2: SPQR Phase 2 (sk_spqr → SPQR state)
@@ -752,12 +746,10 @@ def show_bob_pqxdh_bootstrap_visualization_dialog(
 
     # Phase 2: DR Phase 2 (sk_dr → DR state)
     if sk_dr is not None:
-        tooltips_dr = get_tooltip_messages("x3dh")
         steps.extend(build_bob_x3dh_phase2_steps(
             sk_dr, session_ad,
             bob_spk_public, bob_spk_priv,
             bob_ik_pub, bob_ik_priv,
-            tooltips_dr
         ))
 
     # Phase 2: SPQR Phase 2 (sk_spqr → SPQR state)

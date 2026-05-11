@@ -4,6 +4,7 @@ import flet as ft
 from typing import Any, Callable
 
 from components.data_classes import KeyEvent
+from modules.base_steps import func_node, var_node
 from modules.base_view import last_n_chars, make_copy_handler
 from modules.tooltip_helpers import build_tooltip_text
 
@@ -91,9 +92,6 @@ def get_key_tooltip_text(event: KeyEvent) -> str:
 
     return "\n".join(lines)
 
-VarNodeFactory = Callable[[str, Any, str], ft.Control]
-FlowNodeFactory = Callable[..., ft.Control]
-FunctionNodeFactory = Callable[[str, str, Any | None, Any | None], ft.Control]
 TooltipResolver = Callable[[str], str]
 
 
@@ -103,8 +101,6 @@ def build_message_step(
     msg_epoch: Any,
     msg_type_label: str,
     msg_type_full: str,
-    var_node: VarNodeFactory,
-    flow_node: FlowNodeFactory,
     tt: TooltipResolver,
 ) -> list[dict[str, Any]]:
     return [
@@ -115,11 +111,11 @@ def build_message_step(
                     ft.Text(build_title, weight="bold"),
                     ft.Row(
                         controls=[
-                            var_node("chunk", chunk, "spqr_step_chunk_in_msg"),
-                            var_node("epoch", msg_epoch, "spqr_step_epoch_in_msg"),
-                            flow_node(
+                            var_node("chunk", value=chunk, tooltip=tt("spqr_step_chunk_in_msg")),
+                            var_node("epoch", value=msg_epoch, tooltip=tt("spqr_step_epoch_in_msg")),
+                            var_node(
                                 "msg.type",
-                                msg_type_label,
+                                value=msg_type_label,
                                 width=220,
                                 tooltip=tt("spqr_step_msg_type_in_msg"),
                                 full_value=msg_type_full,
@@ -130,9 +126,8 @@ def build_message_step(
                         wrap=True,
                     ),
                     ft.Text("↓", size=24),
-                    flow_node(
+                    func_node(
                         "Build SpqrMessage",
-                        circle=True,
                         width=220,
                         height=70,
                         tooltip=tt("spqr_step_build_message"),
@@ -145,15 +140,15 @@ def build_message_step(
                     ft.Text("↓", size=24),
                     ft.Row(
                         controls=[
-                            var_node("epoch", msg_epoch, "spqr_step_msg_epoch"),
-                            flow_node(
+                            var_node("epoch", value=msg_epoch, tooltip=tt("spqr_step_msg_epoch")),
+                            var_node(
                                 "msg.type",
-                                msg_type_label,
+                                value=msg_type_label,
                                 width=220,
                                 tooltip=tt("spqr_step_msg_type"),
                                 full_value=msg_type_full,
                             ),
-                            var_node("msg.data", chunk, "spqr_step_msg_data"),
+                            var_node("msg.data", value=chunk, tooltip=tt("spqr_step_msg_data")),
                         ],
                         alignment=ft.MainAxisAlignment.CENTER,
                         spacing=16,
@@ -172,8 +167,6 @@ def build_send_result_step(
     output_key_label: str,
     output_key: Any,
     next_state: str,
-    var_node: VarNodeFactory,
-    flow_node: FlowNodeFactory,
     tt: TooltipResolver,
 ) -> dict[str, Any]:
     return {
@@ -183,17 +176,17 @@ def build_send_result_step(
                 ft.Text("Send result", weight="bold"),
                 ft.Row(
                     controls=[
-                        var_node("sending_epoch", sending_epoch, "spqr_step_sending_epoch"),
-                        flow_node(
+                        var_node("sending_epoch", value=sending_epoch, tooltip=tt("spqr_step_sending_epoch")),
+                        var_node(
                             "output_key",
-                            output_key_label,
+                            value=output_key_label,
                             width=220,
                             tooltip=tt("spqr_step_output_key"),
                             full_value=output_key,
                         ),
-                        flow_node(
+                        var_node(
                             "next_state",
-                            next_state,
+                            value=next_state,
                             width=220,
                             tooltip=tt("spqr_step_next_state"),
                             full_value=next_state,
@@ -220,9 +213,6 @@ def build_chunk_send_steps(
     msg_type_label: str,
     msg_type_full: str,
     next_state: str,
-    var_node: VarNodeFactory,
-    flow_node: FlowNodeFactory,
-    function_node: FunctionNodeFactory,
     tt: TooltipResolver,
 ) -> list[dict[str, Any]]:
     return [
@@ -231,14 +221,13 @@ def build_chunk_send_steps(
             "control": ft.Column(
                 controls=[
                     ft.Text(generate_title, weight="bold"),
-                    function_node(
+                    func_node(
                         "Encoder.next_chunk",
-                        "spqr_step_next_chunk",
-                        chunk_expr,
-                        None,
+                        value=chunk_expr,
+                        tooltip=tt("spqr_step_next_chunk"),
                     ),
                     ft.Text("↓", size=24),
-                    var_node("chunk", chunk, "spqr_step_chunk"),
+                    var_node("chunk", value=chunk, tooltip=tt("spqr_step_chunk")),
                 ],
                 spacing=6,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -250,8 +239,6 @@ def build_chunk_send_steps(
             msg_epoch=msg_epoch,
             msg_type_label=msg_type_label,
             msg_type_full=msg_type_full,
-            var_node=var_node,
-            flow_node=flow_node,
             tt=tt,
         ),
         build_send_result_step(
@@ -259,8 +246,6 @@ def build_chunk_send_steps(
             output_key_label="None",
             output_key=None,
             next_state=next_state,
-            var_node=var_node,
-            flow_node=flow_node,
             tt=tt,
         ),
     ]
@@ -272,8 +257,6 @@ def build_none_send_steps(
     msg_type_label: str,
     msg_type_full: str,
     next_state: str,
-    var_node: VarNodeFactory,
-    flow_node: FlowNodeFactory,
     tt: TooltipResolver,
 ) -> list[dict[str, Any]]:
     return [
@@ -284,11 +267,11 @@ def build_none_send_steps(
                     ft.Text("Build message with no data to send", weight="bold"),
                     ft.Row(
                         controls=[
-                            flow_node("data", "None", width=220, tooltip=tt("spqr_step_chunk_in_msg"), full_value=None),
-                            var_node("epoch", msg_epoch, "spqr_step_epoch_in_msg"),
-                            flow_node(
+                            var_node("data", value="None", width=220, tooltip=tt("spqr_step_chunk_in_msg"), full_value=None),
+                            var_node("epoch", value=msg_epoch, tooltip=tt("spqr_step_epoch_in_msg")),
+                            var_node(
                                 "msg.type",
-                                msg_type_label,
+                                value=msg_type_label,
                                 width=220,
                                 tooltip=tt("spqr_step_msg_type_in_msg"),
                                 full_value=msg_type_full,
@@ -299,9 +282,8 @@ def build_none_send_steps(
                         wrap=True,
                     ),
                     ft.Text("↓", size=24),
-                    flow_node(
+                    func_node(
                         "Build SpqrMessage",
-                        circle=True,
                         width=220,
                         height=70,
                         tooltip=tt("spqr_step_build_message"),
@@ -314,15 +296,15 @@ def build_none_send_steps(
                     ft.Text("↓", size=24),
                     ft.Row(
                         controls=[
-                            var_node("epoch", msg_epoch, "spqr_step_msg_epoch"),
-                            flow_node(
+                            var_node("epoch", value=msg_epoch, tooltip=tt("spqr_step_msg_epoch")),
+                            var_node(
                                 "msg.type",
-                                msg_type_label,
+                                value=msg_type_label,
                                 width=220,
                                 tooltip=tt("spqr_step_msg_type"),
                                 full_value=msg_type_full,
                             ),
-                            flow_node("msg.data", "None", width=220, tooltip=tt("spqr_step_msg_data"), full_value=None),
+                            var_node("msg.data", value="None", width=220, tooltip=tt("spqr_step_msg_data"), full_value=None),
                         ],
                         alignment=ft.MainAxisAlignment.CENTER,
                         spacing=16,
@@ -338,8 +320,6 @@ def build_none_send_steps(
             output_key_label="None",
             output_key=None,
             next_state=next_state,
-            var_node=var_node,
-            flow_node=flow_node,
             tt=tt,
         ),
     ]
@@ -509,6 +489,143 @@ def build_perspective_selector(
         ),
         on_change=on_change,
     )
+
+
+def build_timeline_column() -> ft.Column:
+    return ft.Column(
+        [ft.Row([ft.Text("Message Timeline", weight="bold")], alignment=ft.MainAxisAlignment.CENTER)],
+        scroll=ft.ScrollMode.ALWAYS,
+        expand=True,
+        spacing=6,
+    )
+
+
+def collect_timeline_items(
+    message_log: list[Any],
+    pending_messages: list[dict] | None,
+) -> list[tuple[int, str, Any]]:
+    items: list[tuple[int, str, Any]] = [(msg.seq_id, "received", msg) for msg in message_log]
+    if pending_messages:
+        for p in pending_messages:
+            if isinstance(p.get("id"), int):
+                items.append((p["id"], "pending", p))
+    return items
+
+
+def pqxdh_header_preview(pqxdh_header: dict | None) -> str:
+    if not isinstance(pqxdh_header, dict):
+        return ""
+    ik_a = str(pqxdh_header.get("ik_a_public", ""))
+    ek_a = str(pqxdh_header.get("ek_a_public", ""))
+    bob_spk = str(pqxdh_header.get("bob_spk_public", ""))
+    pq_id = pqxdh_header.get("bob_pq_prekey_id")
+    return f"ik_a={ik_a[-8:]}, ek_a={ek_a[-8:]}, spk_b={bob_spk[-8:]}, pq_id={pq_id}"
+
+
+def find_bob_pqxdh_header(message_log: list[Any]) -> dict | None:
+    for msg in message_log:
+        h = getattr(msg, "pqxdh_header", None)
+        if isinstance(h, dict) and str(getattr(msg, "receiver", "")).lower() == "bob":
+            return h
+    return None
+
+
+def build_timeline_entry(
+    row_controls: list[ft.Control],
+    header_text: str,
+    body: str,
+    pqxdh_text: str = "",
+    border: ft.Border | None = None,
+    text_size: int = 11,
+) -> ft.Container:
+    content: list[ft.Control] = [
+        ft.Row(row_controls),
+        ft.Text(f"header: {header_text}", size=text_size),
+    ]
+    if pqxdh_text:
+        content.append(ft.Text(f"pqxdh: {pqxdh_text}", size=text_size))
+    content.append(ft.Text(f"message: {body}"))
+    return ft.Container(
+        content=ft.Column(content, spacing=2, tight=True),
+        padding=6,
+        border=border,
+        border_radius=5,
+    )
+
+
+def build_received_row_controls(
+    seq_id: int,
+    sender: str,
+    receiver: str,
+    on_show_send_visualization: Callable | None,
+    on_show_receive_visualization: Callable | None,
+) -> list[ft.Control]:
+    controls: list[ft.Control] = [ft.Text(f"[{seq_id}] {sender} → {receiver} | ")]
+    if on_show_send_visualization is not None:
+        controls.append(ft.TextButton("Send steps", on_click=lambda _, sid=seq_id: on_show_send_visualization(sid)))
+    if on_show_receive_visualization is not None:
+        controls.append(ft.TextButton("Receive steps", on_click=lambda _, sid=seq_id: on_show_receive_visualization(sid)))
+    return controls
+
+
+def build_pending_row_controls(
+    seq_id: int,
+    sender: str,
+    receiver: str,
+    perspective_key: str,
+    on_receive_pending: Callable | None,
+    on_show_send_visualization: Callable | None,
+) -> list[ft.Control]:
+    can_receive = perspective_key in {"global", receiver.lower()}
+    controls: list[ft.Control] = [ft.Text(f"[{seq_id}] {sender} → {receiver} | ")]
+    if can_receive and on_receive_pending is not None:
+        controls.append(ft.TextButton("Receive", on_click=lambda _, pid=seq_id, who=receiver: on_receive_pending(who, pid)))
+    else:
+        controls.append(ft.Text("Pending"))
+    if on_show_send_visualization is not None:
+        controls.append(ft.TextButton("Send steps", on_click=lambda _, sid=seq_id: on_show_send_visualization(sid)))
+    return controls
+
+
+def resolve_received_body(
+    perspective_key: str,
+    sender: str,
+    plaintext: bytes,
+    decrypted_by_receiver: bytes,
+    cipher: bytes,
+) -> str:
+    sender_view = perspective_key in {"global", sender.lower()}
+    return safe_decode_bytes(plaintext if sender_view else decrypted_by_receiver) or safe_decode_bytes(cipher)
+
+
+def resolve_pending_body(
+    perspective_key: str,
+    sender: str,
+    plaintext: bytes,
+    cipher: bytes,
+) -> str:
+    return safe_decode_bytes(plaintext if perspective_key in {"global", sender.lower()} else cipher)
+
+
+def append_pqxdh_bootstrap_buttons(
+    col: ft.Column,
+    session_alice: Any,
+    bob_initialized: bool,
+    bob_pqxdh_header: dict | None,
+    perspective_key: str,
+    on_show_alice_bootstrap: Callable | None,
+    on_show_bob_bootstrap: Callable | None,
+    alice_label: str = "Show Alice PQXDH initialization",
+    bob_label: str = "Show Bob PQXDH initialization",
+) -> None:
+    buttons: list[ft.Control] = []
+    if on_show_alice_bootstrap and session_alice is not None and perspective_key in {"global", "alice"}:
+        buttons.append(ft.TextButton(alice_label, on_click=lambda _: on_show_alice_bootstrap()))
+    if on_show_bob_bootstrap and bob_initialized and bob_pqxdh_header is not None and perspective_key in {"global", "bob"}:
+        buttons.append(ft.TextButton(bob_label, on_click=lambda _, h=bob_pqxdh_header: on_show_bob_bootstrap(h)))
+    if buttons:
+        col.controls.append(ft.Divider(height=8))
+        col.controls.extend(buttons)
 
 
 def build_module_layout(

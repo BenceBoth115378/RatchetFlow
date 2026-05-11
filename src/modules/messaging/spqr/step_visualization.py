@@ -553,8 +553,6 @@ def _build_message_step(
         msg_epoch=msg_epoch,
         msg_type_label=msg_type_label,
         msg_type_full=msg_type_full,
-        var_node=var_node,
-        flow_node=var_node,
         tt=_tt,
     )
 
@@ -570,8 +568,6 @@ def _build_send_result_step(
         output_key_label=output_key_label,
         output_key=output_key,
         next_state=next_state,
-        var_node=var_node,
-        flow_node=var_node,
         tt=_tt,
     )
 
@@ -597,9 +593,6 @@ def _build_chunk_send_steps(
         msg_type_label=msg_type_label,
         msg_type_full=msg_type_full,
         next_state=next_state,
-        var_node=var_node,
-        flow_node=var_node,
-        function_node=func_node,
         tt=_tt,
     )
 
@@ -617,8 +610,6 @@ def _build_none_send_steps(
         msg_type_label=msg_type_label,
         msg_type_full=msg_type_full,
         next_state=next_state,
-        var_node=var_node,
-        flow_node=var_node,
         tt=_tt,
     )
 

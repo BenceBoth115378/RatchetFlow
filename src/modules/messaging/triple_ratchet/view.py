@@ -17,18 +17,11 @@ from modules.messaging.messaging_base_view import (
     build_key_field,
     get_key_tooltip_text,
     is_party_visible,
-    safe_decode_bytes,
+    build_timeline_column, collect_timeline_items, pqxdh_header_preview, find_bob_pqxdh_header,
+    build_timeline_entry, build_received_row_controls, build_pending_row_controls,
+    resolve_received_body, resolve_pending_body, append_pqxdh_bootstrap_buttons,
 )
 
-
-def _pqxdh_header_preview(pqxdh_header: dict | None) -> str:
-    if not isinstance(pqxdh_header, dict):
-        return ""
-    ik_a = str(pqxdh_header.get("ik_a_public", ""))
-    ek_a = str(pqxdh_header.get("ek_a_public", ""))
-    bob_spk = str(pqxdh_header.get("bob_spk_public", ""))
-    pq_id = pqxdh_header.get("bob_pq_prekey_id")
-    return f"ik_a={ik_a[-8:]}, ek_a={ek_a[-8:]}, spk_b={bob_spk[-8:]}, pq_id={pq_id}"
 
 
 def _build_dr_section(
@@ -179,101 +172,26 @@ def build_timeline(
     on_show_bob_pqxdh_bootstrap: Callable | None = None,
 ) -> ft.Control:
     perspective_key = perspective.lower()
+    col = build_timeline_column()
+    bob_pqxdh_header = find_bob_pqxdh_header(session.message_log)
 
-    col = ft.Column(
-        [ft.Row([ft.Text("Message Timeline", weight="bold")], alignment=ft.MainAxisAlignment.CENTER)],
-        scroll=ft.ScrollMode.ALWAYS, expand=True, spacing=6,
-    )
-
-    items: list[tuple[int, str, Any]] = []
-    for msg in session.message_log:
-        items.append((msg.seq_id, "received", msg))
-    if pending_messages:
-        for p in pending_messages:
-            if isinstance(p.get("id"), int):
-                items.append((p["id"], "pending", p))
-
-    bob_initialized = session.bob is not None
-    bob_pqxdh_header: dict | None = None
-    for msg in session.message_log:
-        h = getattr(msg, "pqxdh_header", None)
-        if isinstance(h, dict) and str(getattr(msg, "receiver", "")).lower() == "bob":
-            bob_pqxdh_header = h
-            break
-
-    for seq_id, kind, entry in sorted(items, key=lambda x: x[0], reverse=True):
+    for seq_id, kind, entry in sorted(
+        collect_timeline_items(session.message_log, pending_messages),
+        key=lambda x: x[0], reverse=True,
+    ):
         if kind == "received":
             msg: TripleRatchetMessageState = entry
-            sender = msg.sender
-            receiver = msg.receiver
-            sender_view = perspective_key in {"global", sender.lower()}
-            body = safe_decode_bytes(msg.plaintext if sender_view else msg.decrypted_by_receiver) or safe_decode_bytes(msg.cipher)
-
-            row_controls: list[ft.Control] = [ft.Text(f"[{seq_id}] {sender} → {receiver} | ")]
-            if on_show_send_visualization:
-                row_controls.append(ft.TextButton("Send steps", on_click=lambda e, sid=seq_id: on_show_send_visualization(sid)))
-            if on_show_receive_visualization:
-                row_controls.append(ft.TextButton("Receive steps", on_click=lambda e, sid=seq_id: on_show_receive_visualization(sid)))
-
-            pqxdh_text = _pqxdh_header_preview(getattr(msg, "pqxdh_header", None))
-            col.controls.append(
-                ft.Container(
-                    content=ft.Column(
-                        [
-                            ft.Row(row_controls),
-                            ft.Text(f"header: {_header_text(msg)}", size=11),
-                            *([ ft.Text(f"pqxdh: {pqxdh_text}", size=11)] if pqxdh_text else []),
-                            ft.Text(f"message: {body}"),
-                        ],
-                        spacing=2, tight=True,
-                    ),
-                    padding=6, border_radius=5,
-                )
-            )
-
+            body = resolve_received_body(perspective_key, msg.sender, msg.plaintext, msg.decrypted_by_receiver, msg.cipher)
+            row_controls = build_received_row_controls(seq_id, msg.sender, msg.receiver, on_show_send_visualization, on_show_receive_visualization)
+            col.controls.append(build_timeline_entry(row_controls, _header_text(msg), body, pqxdh_header_preview(getattr(msg, "pqxdh_header", None))))
         else:
-            pending = entry
-            sender = str(pending.get("sender", ""))
-            receiver = str(pending.get("receiver", ""))
-            header = pending.get("header")
-            cipher = pending.get("cipher", b"")
-            plaintext = pending.get("plaintext", b"")
-            can_receive = perspective_key in {"global", receiver.lower()}
+            sender = str(entry.get("sender", ""))
+            receiver = str(entry.get("receiver", ""))
+            body = resolve_pending_body(perspective_key, sender, entry.get("plaintext", b""), entry.get("cipher", b""))
+            row_controls = build_pending_row_controls(seq_id, sender, receiver, perspective_key, on_receive_pending, on_show_send_visualization)
+            col.controls.append(build_timeline_entry(row_controls, _pending_header_text(entry.get("header")), body, pqxdh_header_preview(entry.get("pqxdh_header")), ft.Border.all(1, ft.Colors.OUTLINE_VARIANT)))
 
-            row_controls = [ft.Text(f"[{seq_id}] {sender} → {receiver} | ")]
-            if can_receive and on_receive_pending:
-                row_controls.append(ft.TextButton("Receive", on_click=lambda e, pid=seq_id, who=receiver: on_receive_pending(who, pid)))
-            else:
-                row_controls.append(ft.Text("Pending"))
-            if on_show_send_visualization:
-                row_controls.append(ft.TextButton("Send steps", on_click=lambda e, sid=seq_id: on_show_send_visualization(sid)))
-
-            pqxdh_text = _pqxdh_header_preview(pending.get("pqxdh_header"))
-            body = safe_decode_bytes(plaintext if perspective_key in {"global", sender.lower()} else cipher)
-            col.controls.append(
-                ft.Container(
-                    content=ft.Column(
-                        [
-                            ft.Row(row_controls),
-                            ft.Text(f"header: {_pending_header_text(header)}", size=11),
-                            *([ ft.Text(f"pqxdh: {pqxdh_text}", size=11)] if pqxdh_text else []),
-                            ft.Text(f"message: {body}"),
-                        ],
-                        spacing=2, tight=True,
-                    ),
-                    padding=6, border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT), border_radius=5,
-                )
-            )
-
-    bottom: list[ft.Control] = []
-    if on_show_alice_pqxdh_bootstrap and session.alice is not None and perspective_key in {"global", "alice"}:
-        bottom.append(ft.TextButton("Show Alice PQXDH initialization", on_click=lambda e: on_show_alice_pqxdh_bootstrap()))
-    if on_show_bob_pqxdh_bootstrap and bob_initialized and bob_pqxdh_header is not None and perspective_key in {"global", "bob"}:
-        bottom.append(ft.TextButton("Show Bob PQXDH initialization", on_click=lambda e, h=bob_pqxdh_header: on_show_bob_pqxdh_bootstrap(h)))
-    if bottom:
-        col.controls.append(ft.Divider(height=8))
-        col.controls.extend(bottom)
-
+    append_pqxdh_bootstrap_buttons(col, session.alice, session.bob is not None, bob_pqxdh_header, perspective_key, on_show_alice_pqxdh_bootstrap, on_show_bob_pqxdh_bootstrap)
     return col
 
 

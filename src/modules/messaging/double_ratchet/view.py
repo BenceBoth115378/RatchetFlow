@@ -1,7 +1,7 @@
 import flet as ft
 from components.data_classes import DoubleRatchetState
 from components.data_classes import PartyState
-from modules.messaging.messaging_base_view import is_party_visible, build_key_field, get_key_tooltip_text, SIDE_PANEL_WIDTH
+from modules.messaging.messaging_base_view import is_party_visible, build_key_field, get_key_tooltip_text, SIDE_PANEL_WIDTH, build_timeline_column, collect_timeline_items
 from modules.base_view import format_key, last_n_chars, make_copy_handler
 from modules.tooltip_helpers import build_tooltip_text, get_tooltip_messages
 
@@ -266,20 +266,8 @@ def build_timeline(
         lowered = target.lower()
         return lowered == sender.lower() or lowered == receiver.lower()
 
-    controls = [
-        ft.Row(
-            controls=[ft.Text("Message Timeline", weight="bold")],
-            alignment=ft.MainAxisAlignment.CENTER,
-        )
-    ]
-
     alice_bootstrap_needed = on_show_alice_x3dh_bootstrap is not None and perspective_key in {"global", "alice"}
-    col = ft.Column(
-        controls,
-        scroll=ft.ScrollMode.ALWAYS,
-        expand=True,
-        spacing=6,
-    )
+    col = build_timeline_column()
 
     def _resolve_message_line(
         perspective_key: str,
@@ -329,13 +317,7 @@ def build_timeline(
             border_radius=5,
         )
 
-    combined = []
-    for msg in session.message_log:
-        combined.append((msg.seq_id, "received", msg))
-    if pending_messages is not None and perspective_key != "attacker":
-        for pending in pending_messages:
-            if isinstance(pending.get("id"), int):
-                combined.append((pending["id"], "pending", pending))
+    combined = collect_timeline_items(session.message_log, pending_messages if perspective_key != "attacker" else None)
 
     attacker_results = {}
     if perspective_key == "attacker" and attacker_analysis:
