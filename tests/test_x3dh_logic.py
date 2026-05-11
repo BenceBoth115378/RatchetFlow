@@ -15,6 +15,7 @@ if str(SRC) not in sys.path:
 
 from components.data_classes import DHKeyPair  # noqa: E402
 from modules.key_exchange.x3dh import logic  # noqa: E402
+from modules.key_exchange import key_exchange_base_logic # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -132,7 +133,7 @@ def test_full_x3dh_flow_with_opk_matches_shared_secret_and_ad():
     logic.request_bob_bundle_for_alice(state)
     logic.alice_verifies_bundle_signature(state)
     logic.alice_generates_ek_and_derives_sk(state)
-    logic.alice_calculates_associated_data(state)
+    key_exchange_base_logic.alice_calculates_associated_data(state)
     logic.alice_sends_initial_message(state, "ignored payload")
     logic.bob_receives_and_verifies(state)
 
@@ -166,7 +167,7 @@ def test_full_x3dh_flow_without_opk_uses_three_dh_operations():
     logic.request_bob_bundle_for_alice(state)
     logic.alice_verifies_bundle_signature(state)
     logic.alice_generates_ek_and_derives_sk(state)
-    logic.alice_calculates_associated_data(state)
+    key_exchange_base_logic.alice_calculates_associated_data(state)
     logic.alice_sends_initial_message(state, "ignored payload")
     logic.bob_receives_and_verifies(state)
 
