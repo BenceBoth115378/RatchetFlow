@@ -288,5 +288,30 @@
     "shared_secret_preview": "Preview of the full shared secret computed by combining EC DH outputs and PQKEM SS.",
     "pqxdh_step_key_ad": "Associated data computed in PQXDH from the parties' EC identity public keys (EncodeEC(IKA) || EncodeEC(IKB)). It authenticates the identity binding of the initial message and is verified by the recipient to detect substitution attacks.",
     "PQSPK_pub": "Bob's PQ signed prekey public value displayed in the party panel. It is the last-resort post-quantum prekey used when no PQOPK is available; Alice encapsulates to it to produce the PQ ciphertext CT."
+  },
+  "triple_ratchet": {
+    "tr_ec_mk": "EC message key produced by the Double Ratchet symmetric chain step. Combined with pq_mk to derive the final hybrid message key.",
+    "tr_pq_mk": "PQ message key produced by the SPQR post-quantum ratchet step. Combined with ec_mk to derive the final hybrid message key.",
+    "tr_mk": "Final hybrid message key derived by KDF_HYBRID from ec_mk and pq_mk. Used for AEAD encryption/decryption of the message payload.",
+    "tr_kdf_hybrid": "Hybrid Key Derivation Function combining the EC message key (ec_mk) and PQ message key (pq_mk) into a single final message key.",
+    "tr_dr_header": "Double Ratchet header extracted from the Triple Ratchet header. Carries the sender's DH ratchet public key, previous chain length (PN), and message number (N).",
+    "tr_spqr_header": "SPQR header extracted from the Triple Ratchet header. Carries the SCKA epoch, message type, and chunk data for the post-quantum ratchet.",
+    "tr_pqxdh_header": "PQXDH initialization header included with the first message. Carries Alice's ephemeral EC key, PQ ciphertext CT, and identity context needed for Bob's bootstrap.",
+    "tr_combine_fn": "Assembles the DR header, SPQR header, and optional PQXDH header into a single serialized Triple Ratchet header sent with each message.",
+    "tr_split_fn": "Extracts the DR header, SPQR header, and optional PQXDH header from the received Triple Ratchet header for independent processing.",
+    "tr_triple_ratchet_header": "Combined Triple Ratchet message header carrying the DR sub-header, SPQR sub-header, and optional PQXDH bootstrap sub-header.",
+    "tr_dr_send_steps": "Double Ratchet send phase: advances the symmetric sending chain and derives the EC message key (ec_mk). Click \"Show DR steps\" to see the full ratchet trace.",
+    "tr_dr_receive_steps": "Double Ratchet receive phase: processes the DR header, advances the receiving chain, and derives the EC message key (ec_mk). Click \"Show DR steps\" to see the full ratchet trace.",
+    "tr_spqr_send_steps": "SPQR send phase: advances the post-quantum SCKA ratchet and derives the PQ message key (pq_mk). Click \"Show SPQR steps\" to see the full ratchet trace.",
+    "tr_spqr_receive_steps": "SPQR receive phase: processes the SPQR header, advances the post-quantum ratchet, and derives the PQ message key (pq_mk). Click \"Show SPQR steps\" to see the full ratchet trace.",
+    "tr_plaintext": "The raw user message before encryption. Triple Ratchet protects it using AEAD with the hybrid EC+PQ message key (mk).",
+    "tr_ciphertext": "The AEAD-encrypted payload produced by Triple Ratchet send. Can only be decrypted with the matching hybrid message key.",
+    "tr_ad_header": "Associated data (AD) concatenated with the message header. Authenticated but not encrypted; binds the ciphertext to its header context to prevent tampering.",
+    "tr_encrypt_fn": "AEAD encryption: takes plaintext, the hybrid message key (mk), and AD || header to produce the ciphertext.",
+    "tr_decrypt_fn": "AEAD decryption: uses the hybrid message key (mk) and AD || header to authenticate and recover the plaintext from the ciphertext.",
+    "tr_sk_pqxdh": "64-byte shared secret SK output by PQXDH key agreement. Split into two 32-byte halves: sk_dr for the Double Ratchet and sk_spqr for SPQR.",
+    "tr_sk_split_fn": "KDF_TR_SPLIT: splits the 64-byte PQXDH shared secret into a 32-byte sk_dr (Double Ratchet seed) and a 32-byte sk_spqr (SPQR seed).",
+    "tr_sk_dr": "32-byte Double Ratchet seed derived from SK via KDF_TR_SPLIT. Used to initialize the Double Ratchet root key (RK) and first sending chain key (CKs).",
+    "tr_sk_spqr": "32-byte SPQR seed derived from SK via KDF_TR_SPLIT. Used to initialize the SPQR post-quantum ratchet root key."
   }
 }

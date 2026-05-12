@@ -32,6 +32,12 @@ from modules.messaging.messaging_base_view import (
 )
 
 
+def _tt(key: str) -> str:
+    from modules.tooltip_helpers import get_tooltip_messages
+    message = get_tooltip_messages("triple_ratchet").get(key, "")
+    return message if message else "Tooltip missing in src/assets/tooltips.json"
+
+
 def _snap_dr_rows(snap: TripleRatchetPartyStateSnapshot) -> list[tuple[str, str, str | None, Any]]:
     return [
         ("DHs", last_n_chars(snap.dr_dhs_public), None, snap.dr_dhs_public),
@@ -131,16 +137,16 @@ def _build_key_combination_step(
                 ft.Text(title, weight="bold"),
                 ft.Row(
                     controls=[
-                        var_node("ec_mk", value=tail_hex(ec_mk), full_value=ec_mk.hex(), width=220),
-                        var_node("pq_mk (SPQR)", value=tail_hex(pq_mk), full_value=pq_mk.hex(), width=220),
+                        var_node("ec_mk", value=tail_hex(ec_mk), full_value=ec_mk.hex(), width=220, tooltip=_tt("tr_ec_mk")),
+                        var_node("pq_mk (SPQR)", value=tail_hex(pq_mk), full_value=pq_mk.hex(), width=220, tooltip=_tt("tr_pq_mk")),
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     spacing=12,
                 ),
                 ft.Text("↓", size=24),
-                func_node("KDF_HYBRID", width=260, height=70),
+                func_node("KDF_HYBRID", width=260, height=70, tooltip=_tt("tr_kdf_hybrid")),
                 ft.Text("↓", size=24),
-                var_node("mk", value=tail_hex(mk), full_value=mk.hex(), width=260),
+                var_node("mk", value=tail_hex(mk), full_value=mk.hex(), width=260, tooltip=_tt("tr_mk")),
             ],
             spacing=8,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -167,11 +173,11 @@ def _build_dr_receiving_step(snapshot: TripleRatchetReceiveSnapshot, page: ft.Pa
         "control": ft.Column(
             controls=[
                 ft.Text(title, weight="bold"),
-                var_node("DR header", value=dr_preview, full_value=dr, width=280),
+                var_node("DR header", value=dr_preview, full_value=dr, width=280, tooltip=_tt("tr_dr_header")),
                 ft.Text("↓", size=16),
-                func_node("Double Ratchet receive steps", width=220, height=70),
+                func_node("Double Ratchet receive steps", width=220, height=70, tooltip=_tt("tr_dr_receive_steps")),
                 ft.Text("↓", size=16),
-                var_node("ec_mk", value=tail_hex(snapshot.ec_mk), full_value=snapshot.ec_mk.hex(), width=220),
+                var_node("ec_mk", value=tail_hex(snapshot.ec_mk), full_value=snapshot.ec_mk.hex(), width=220, tooltip=_tt("tr_ec_mk")),
                 ft.Button(
                     "Show DR steps",
                     on_click=lambda e: show_dr_visualization(),
@@ -233,12 +239,12 @@ def _build_dr_sending_step(snapshot: TripleRatchetSendSnapshot, page: ft.Page, o
         "control": ft.Column(
             controls=[
                 ft.Text(title, weight="bold"),
-                func_node("Double Ratchet send steps", width=220, height=70),
+                func_node("Double Ratchet send steps", width=220, height=70, tooltip=_tt("tr_dr_send_steps")),
                 ft.Text("↓", size=16),
                 ft.Row(
                     controls=[
-                        var_node("DR header", value=dr_preview, full_value=dr, width=280),
-                        var_node("ec_mk", value=tail_hex(snapshot.ec_mk), full_value=snapshot.ec_mk.hex(), width=220),
+                        var_node("DR header", value=dr_preview, full_value=dr, width=280, tooltip=_tt("tr_dr_header")),
+                        var_node("ec_mk", value=tail_hex(snapshot.ec_mk), full_value=snapshot.ec_mk.hex(), width=220, tooltip=_tt("tr_ec_mk")),
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     spacing=12,
@@ -282,12 +288,12 @@ def _build_spqr_sending_step(snapshot: TripleRatchetSendSnapshot, page: ft.Page,
         "control": ft.Column(
             controls=[
                 ft.Text(title, weight="bold"),
-                func_node("SPQR send steps", width=220, height=70),
+                func_node("SPQR send steps", width=220, height=70, tooltip=_tt("tr_spqr_send_steps")),
                 ft.Text("↓", size=16),
                 ft.Row(
                     controls=[
-                        var_node("SPQR header", value=spqr_preview, full_value=spqr, width=280),
-                        var_node("pq_mk (SPQR)", value=tail_hex(snapshot.pq_mk), full_value=snapshot.pq_mk.hex(), width=220),
+                        var_node("SPQR header", value=spqr_preview, full_value=spqr, width=280, tooltip=_tt("tr_spqr_header")),
+                        var_node("pq_mk (SPQR)", value=tail_hex(snapshot.pq_mk), full_value=snapshot.pq_mk.hex(), width=220, tooltip=_tt("tr_pq_mk")),
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     spacing=12,
@@ -316,11 +322,11 @@ def _build_send_header_step(snapshot: TripleRatchetSendSnapshot) -> dict[str, An
     title = "Header combination"
 
     inputs = [
-        var_node("DR header", value=dr_preview, full_value=dr, width=280),
-        var_node("SPQR header", value=spqr_preview, full_value=spqr, width=280),
+        var_node("DR header", value=dr_preview, full_value=dr, width=280, tooltip=_tt("tr_dr_header")),
+        var_node("SPQR header", value=spqr_preview, full_value=spqr, width=280, tooltip=_tt("tr_spqr_header")),
     ]
     if pqxdh_preview is not None:
-        inputs.append(var_node("PQXDH header", value=pqxdh_preview, full_value=pqxdh, width=420))
+        inputs.append(var_node("PQXDH header", value=pqxdh_preview, full_value=pqxdh, width=420, tooltip=_tt("tr_pqxdh_header")))
 
     combined_value = f"dr: {dr_preview} | spqr: {spqr_preview}"
     if pqxdh_preview is not None:
@@ -338,9 +344,9 @@ def _build_send_header_step(snapshot: TripleRatchetSendSnapshot) -> dict[str, An
                     wrap=True,
                 ),
                 ft.Text("↓", size=24),
-                func_node("COMBINE", width=260, height=70),
+                func_node("COMBINE", width=260, height=70, tooltip=_tt("tr_combine_fn")),
                 ft.Text("↓", size=24),
-                var_node("TripleRatchetHeader", value=combined_value, full_value=snapshot.header, width=620),
+                var_node("TripleRatchetHeader", value=combined_value, full_value=snapshot.header, width=620, tooltip=_tt("tr_triple_ratchet_header")),
             ],
             spacing=8,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -375,11 +381,11 @@ def _build_spqr_receiving_step(snapshot: TripleRatchetReceiveSnapshot, page: ft.
         "control": ft.Column(
             controls=[
                 ft.Text(title, weight="bold"),
-                var_node("SPQR header", value=spqr_preview, full_value=spqr, width=280),
+                var_node("SPQR header", value=spqr_preview, full_value=spqr, width=280, tooltip=_tt("tr_spqr_header")),
                 ft.Text("↓", size=16),
-                func_node("SPQR receive steps", width=220, height=70),
+                func_node("SPQR receive steps", width=220, height=70, tooltip=_tt("tr_spqr_receive_steps")),
                 ft.Text("↓", size=16),
-                var_node("pq_mk", value=tail_hex(snapshot.pq_mk), full_value=snapshot.pq_mk.hex(), width=220),
+                var_node("pq_mk", value=tail_hex(snapshot.pq_mk), full_value=snapshot.pq_mk.hex(), width=220, tooltip=_tt("tr_pq_mk")),
                 ft.Button(
                     "Show SPQR steps",
                     on_click=lambda e: show_spqr_visualization(),
@@ -425,12 +431,12 @@ def _build_receive_header_step(snapshot: TripleRatchetReceiveSnapshot) -> dict[s
     spqr_preview = spqr_header_preview(spqr)
 
     split_outputs = [
-        var_node("DR header", value=dr_preview, full_value=dr, width=280),
-        var_node("SPQR header", value=spqr_preview, full_value=spqr, width=300),
+        var_node("DR header", value=dr_preview, full_value=dr, width=280, tooltip=_tt("tr_dr_header")),
+        var_node("SPQR header", value=spqr_preview, full_value=spqr, width=300, tooltip=_tt("tr_spqr_header")),
     ]
     if pqxdh is not None:
         split_outputs.append(
-            var_node("PQXDH header", value=pqxdh_header_preview(pqxdh), full_value=pqxdh, width=420)
+            var_node("PQXDH header", value=pqxdh_header_preview(pqxdh), full_value=pqxdh, width=420, tooltip=_tt("tr_pqxdh_header"))
         )
 
     title = "Triple Ratchet header extraction"
@@ -444,9 +450,10 @@ def _build_receive_header_step(snapshot: TripleRatchetReceiveSnapshot) -> dict[s
                     value=f"dr: {dr_preview} | spqr: {spqr_preview}",
                     full_value=snapshot.header,
                     width=620,
+                    tooltip=_tt("tr_triple_ratchet_header"),
                 ),
                 ft.Text("↓", size=24),
-                func_node("SPLIT", width=220, height=70),
+                func_node("SPLIT", width=220, height=70, tooltip=_tt("tr_split_fn")),
                 ft.Text("↓", size=24),
                 ft.Row(
                     controls=split_outputs,
@@ -500,18 +507,18 @@ def show_triple_ratchet_send_step_dialog(
                 ft.Text("Encryption", weight="bold"),
                 ft.Row(
                     controls=[
-                        var_node("plaintext", value=plaintext_str, full_value=plaintext_str),
-                        var_node("mk", value=combined_preview, full_value=snapshot.mk.hex()),
-                        var_node("AD || header"),
+                        var_node("plaintext", value=plaintext_str, full_value=plaintext_str, tooltip=_tt("tr_plaintext")),
+                        var_node("mk", value=combined_preview, full_value=snapshot.mk.hex(), tooltip=_tt("tr_mk")),
+                        var_node("AD || header", tooltip=_tt("tr_ad_header")),
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     spacing=12,
                     wrap=True,
                 ),
                 ft.Text("↓", size=24),
-                func_node("ENCRYPT", width=320, height=70),
+                func_node("ENCRYPT", width=320, height=70, tooltip=_tt("tr_encrypt_fn")),
                 ft.Text("↓", size=24),
-                var_node("ciphertext", value=cipher_preview, full_value=snapshot.cipher.hex(), width=320),
+                var_node("ciphertext", value=cipher_preview, full_value=snapshot.cipher.hex(), width=320, tooltip=_tt("tr_ciphertext")),
             ],
             spacing=8,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -580,17 +587,17 @@ def show_triple_ratchet_receive_step_dialog(
                 ft.Text("Decryption result", weight="bold"),
                 ft.Row(
                     controls=[
-                        var_node("ciphertext", value=cipher_preview, full_value=snapshot.cipher.hex()),
-                        var_node("mk", value=combined_preview, full_value=snapshot.mk.hex()),
-                        var_node("AD|| header")
+                        var_node("ciphertext", value=cipher_preview, full_value=snapshot.cipher.hex(), tooltip=_tt("tr_ciphertext")),
+                        var_node("mk", value=combined_preview, full_value=snapshot.mk.hex(), tooltip=_tt("tr_mk")),
+                        var_node("AD|| header", tooltip=_tt("tr_ad_header")),
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     spacing=12,
                 ),
                 ft.Text("↓", size=24),
-                func_node("DECRYPT", width=320, height=70),
+                func_node("DECRYPT", width=320, height=70, tooltip=_tt("tr_decrypt_fn")),
                 ft.Text("↓", size=24),
-                var_node("plaintext", value=decrypted_str, full_value=decrypted_str, width=340),
+                var_node("plaintext", value=decrypted_str, full_value=decrypted_str, width=340, tooltip=_tt("tr_plaintext")),
             ],
             spacing=8,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -621,14 +628,14 @@ def _build_sk_split_step(sk: bytes, sk_dr: bytes, sk_spqr: bytes) -> dict[str, A
         "control": ft.Column(
             controls=[
                 ft.Text("PQXDH SK split (KDF_TR_SPLIT)", weight="bold"),
-                var_node("SK (PQXDH)", value=tail_hex(sk), full_value=sk.hex(), width=260),
+                var_node("SK (PQXDH)", value=tail_hex(sk), full_value=sk.hex(), width=260, tooltip=_tt("tr_sk_pqxdh")),
                 ft.Text("↓", size=24),
-                func_node("Split", width=220, height=70),
+                func_node("Split", width=220, height=70, tooltip=_tt("tr_sk_split_fn")),
                 ft.Text("↓", size=24),
                 ft.Row(
                     controls=[
-                        var_node("sk_dr", value=tail_hex(sk_dr), full_value=sk_dr.hex(), width=200),
-                        var_node("sk_spqr", value=tail_hex(sk_spqr), full_value=sk_spqr.hex(), width=200),
+                        var_node("sk_dr", value=tail_hex(sk_dr), full_value=sk_dr.hex(), width=200, tooltip=_tt("tr_sk_dr")),
+                        var_node("sk_spqr", value=tail_hex(sk_spqr), full_value=sk_spqr.hex(), width=200, tooltip=_tt("tr_sk_spqr")),
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     spacing=12,
