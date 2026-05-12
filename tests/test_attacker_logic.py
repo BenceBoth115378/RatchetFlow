@@ -24,10 +24,10 @@ from components.data_classes import (   # noqa: E402
     LimitedSkippedKeys,
 )
 from modules.messaging.double_ratchet import logic  # noqa: E402
+from modules.messaging.double_ratchet.attacker_dashboard.logic import get_attacker_analysis  # noqa: E402
 from modules.messaging.double_ratchet.attacker_dashboard.view import (  # noqa: E402
     build_attacker_dashboard,
     collect_attacker_secret_options,
-    get_attacker_analysis,
 )
 from modules.messaging.double_ratchet.key_history import initialize_key_history  # noqa: E402
 

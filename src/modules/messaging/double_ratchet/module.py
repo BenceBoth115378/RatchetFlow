@@ -361,6 +361,8 @@ class DoubleRatchetModule(MessagingBaseModule):
         max_pending_seq_id = max((item["id"] for item in self.pending_messages), default=0)
         self._next_pending_id = max(max_log_seq_id, max_pending_seq_id) + 1
 
+        self._initial_warning_shown = True
+
         if self._x3dh_shared_secret is None or self._x3dh_bob_spk_pair is None:
             self._reset_session()
 

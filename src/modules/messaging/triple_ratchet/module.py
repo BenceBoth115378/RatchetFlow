@@ -92,6 +92,7 @@ def _class_map() -> dict[str, type]:
         "SpqrMessageType": SpqrMessageType,
         "SpqrSckaMessage": SpqrSckaMessage,
         "SckaOutputKey": SckaOutputKey,
+        "KeyEvent": KeyEvent,
         "AuthenticatorState": AuthenticatorState,
         "EncoderState": EncoderState,
         "DecoderState": DecoderState,
@@ -868,6 +869,7 @@ class TripleRatchetModule(MessagingBaseModule):
         self._last_bob_bootstrap_info = data.get("last_bob_bootstrap_info") if isinstance(data.get("last_bob_bootstrap_info"), dict) else None
         self._send_steps.clear()
         self._receive_steps.clear()
+        self._initial_warning_shown = True
 
         if self.session.alice is None and self._pqxdh_bootstrap_payload is not None:
             self._apply_pqxdh_bootstrap_payload(self._pqxdh_bootstrap_payload)
