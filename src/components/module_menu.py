@@ -46,7 +46,6 @@ def build_module_menu(module_cards: list[dict], on_select: callable) -> ft.Contr
 
     return ft.Column(
         controls=[
-            ft.Text("Signal Protocol Models", size=34, weight=ft.FontWeight.BOLD),
             ft.Text(
                 "Choose a simulator module to explore.",
                 size=14,

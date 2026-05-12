@@ -1071,7 +1071,7 @@ class TripleRatchetModule(MessagingBaseModule):
             if self._pending_show_alice_pqxdh_bootstrap:
                 show_initial_bootstrap_warning(
                     page,
-                    "Triple Ratchet session initialized with PQXDH + DR and SPQR ratchets.",
+                    "Triple Ratchet session initialized with PQXDH for DR and SPQR ratchets.",
                     "Show Alice PQXDH bootstrap steps",
                     "Info",
                     _on_bootstrap_viz,
@@ -1080,7 +1080,7 @@ class TripleRatchetModule(MessagingBaseModule):
         refresh_view()
 
         return build_module_layout(
-            title_text="Triple Ratchet",
+            title_text="Triple Ratchet Simulation",
             send_step_visualization_checkbox=send_step_visualization_checkbox,
             receive_step_visualization_checkbox=receive_step_visualization_checkbox,
             auto_receive_checkbox=auto_receive_checkbox,

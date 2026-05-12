@@ -9,7 +9,7 @@ from components.router import Router
 
 
 def main(page: ft.Page):
-    page.title = "Signal Interactive"
+    page.title = "RatchetFlow"
     page.scroll = "auto"
 
     if hasattr(page, "window") and page.window is not None:
@@ -51,7 +51,7 @@ def main(page: ft.Page):
             main_container.controls.append(
                 ft.Row(
                     controls=[
-                        ft.Text("Signal Protocol Models", size=20, weight=ft.FontWeight.BOLD),
+                        ft.Text("Available modules", size=28, weight=ft.FontWeight.BOLD),
                         _state_controls(),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
