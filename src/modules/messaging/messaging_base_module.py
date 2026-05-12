@@ -63,7 +63,16 @@ def decode_nested(value: Any, class_map: dict[str, type]) -> Any:
             if cls is not None and isinstance(raw_fields, dict):
                 kwargs = {key: decode_nested(item, class_map) for key, item in raw_fields.items()}
                 return cls(**kwargs)
-        return {key: decode_nested(item, class_map) for key, item in value.items()}
+
+        def _decode_key(key: Any) -> Any:
+            if isinstance(key, str) and key.isdigit():
+                try:
+                    return int(key)
+                except ValueError:
+                    return key
+            return key
+
+        return {_decode_key(key): decode_nested(item, class_map) for key, item in value.items()}
     if isinstance(value, list):
         return [decode_nested(item, class_map) for item in value]
     return value

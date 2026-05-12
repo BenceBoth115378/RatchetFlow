@@ -443,6 +443,7 @@ class DecoderState:
 @dataclass
 class BraidProtocolState:
     node: Any
+    node_history: dict[int, Any] = field(default_factory=dict)
 
 
 @dataclass

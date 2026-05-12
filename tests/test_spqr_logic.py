@@ -91,14 +91,47 @@ def test_try_skipped_message_keys_returns_and_deletes_key():
 
 def test_clear_old_epochs_removes_epoch_minus_two_data():
     state, _ = _bootstrap_states()
-    state.kdfchains[1] = state.kdfchains[0]
-    state.kdfchains[2] = state.kdfchains[0]
+    state.kdfchains[1] = logic.EpochKdfChains(
+        send=logic.KDFChain(b"send-1"),
+        receive=logic.KDFChain(b"recv-1"),
+    )
+    state.kdfchains[2] = logic.EpochKdfChains(
+        send=logic.KDFChain(b"send-2"),
+        receive=logic.KDFChain(b"recv-2"),
+    )
     state.MKSKIPPED[1] = {1: b"old-mk"}
 
     logic.ClearOldEpochs(state, sending_epoch=3)
 
-    assert 1 not in state.kdfchains
+    assert 1 in state.kdfchains
+    assert state.kdfchains[1].send is None
+    assert state.kdfchains[1].receive is not None
     assert 1 not in state.MKSKIPPED
+
+
+def test_clear_old_epochs_keeps_receive_chain_available_for_late_delivery(monkeypatch: pytest.MonkeyPatch):
+    state, _ = _bootstrap_states()
+    state.kdfchains[1] = logic.EpochKdfChains(
+        send=logic.KDFChain(b"send-1"),
+        receive=logic.KDFChain(b"recv-1"),
+    )
+    state.kdfchains[2] = logic.EpochKdfChains(
+        send=logic.KDFChain(b"send-2"),
+        receive=logic.KDFChain(b"recv-2"),
+    )
+
+    logic.ClearOldEpochs(state, sending_epoch=3)
+
+    def fake_receive(_state, _msg_obj):
+        return SckaReceiveResult(receiving_epoch=1, output_key=None)
+
+    monkeypatch.setattr(logic, "SCKAReceive", fake_receive)
+
+    header = SpqrHeader(msg=_msg(epoch=2), n=1)
+    mk, trace = logic.SCKARatchetReceiveKey(state, header)
+
+    assert isinstance(mk, bytes)
+    assert trace["used_skipped_key"] is False
 
 
 def test_skip_message_keys_derives_and_stores_missing_keys():
@@ -276,3 +309,34 @@ def test_ratchet_send_and_receive_require_scka_state():
     header = SpqrHeader(msg=_msg(epoch=1), n=1)
     with pytest.raises(ValueError, match="SPQR state has no SCKA state"):
         logic.SCKARatchetReceiveKey(state, header)
+
+
+def test_late_message_after_epoch_transition_decrypts_from_history():
+    from modules.messaging.spqr.module import SPQRModule  # noqa: E402
+
+    module = SPQRModule()
+    module._reset_session_with_initializer()
+
+    steps = [
+        ("alice", "Alice message #1 to Bob", "Bob"),
+        ("bob", "Bob message #2 to Alice", "Alice"),
+        ("alice", "Alice message #3 to Bob", "Bob"),
+        ("bob", "Bob message #4 to Alice", "Alice"),
+        ("alice", "Alice message #5 to Bob", "Bob"),
+        ("bob", "Bob message #6 to Alice", "Alice"),
+        ("alice", "Alice message #7 to Bob", "Bob"),
+        ("bob", "Bob message #8 to Alice", "Alice"),
+        ("alice", "Alice message #9 to Bob", "Bob"),
+        ("bob", "Bob message #10 to Alice", "Alice"),
+    ]
+
+    for sender, plaintext, recipient in steps:
+        pending = module.send_message(sender, plaintext)
+        received = module.receive_message(recipient, pending["id"])
+        assert received is not None
+
+    pending = module.send_message("bob", "Bob message #11 to Alice")
+    received = module.receive_message("Alice", pending["id"])
+
+    assert received is not None
+    assert received.seq_id == 11

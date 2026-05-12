@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import hmac
 import json
@@ -207,19 +208,19 @@ class KeysUnsampled(SckaNode):
 
         # Update state
         # Transition (1)
-        state.node = KeysSampled(
+        _set_scka_node(state, KeysSampled(
             epoch=self.epoch,
             auth=self.auth,
             dk=dk,
             ek_header=ek_header,
             ek_vector=ek_vector,
             header_encoder=header_encoder,
-        )
+        ))
 
         return SckaSendResult(msg=msg, sending_epoch=self.epoch - 1, output_key=None)
 
     def receive(self, state: BraidProtocolState, msg: SpqrSckaMessage) -> SckaReceiveResult:
-        return SckaReceiveResult(receiving_epoch=self.epoch - 1, output_key=None)
+        return SckaReceiveResult(receiving_epoch=msg.epoch - 1, output_key=None)
 
 
 @dataclass
@@ -247,7 +248,7 @@ class KeysSampled(SckaNode):
 
             # Update state
             # Transition (2)
-            state.node = HeaderSent(
+            _set_scka_node(state, HeaderSent(
                 epoch=self.epoch,
                 auth=self.auth,
                 dk=self.dk,
@@ -255,8 +256,8 @@ class KeysSampled(SckaNode):
                 ek_vector=self.ek_vector,
                 ct1_decoder=ct1_decoder,
                 ek_encoder=ek_encoder,
-            )
-        return SckaReceiveResult(receiving_epoch=self.epoch - 1, output_key=None)
+            ))
+        return SckaReceiveResult(receiving_epoch=msg.epoch - 1, output_key=None)
 
 
 @dataclass
@@ -287,7 +288,7 @@ class HeaderSent(SckaNode):
 
                 # Update state
                 # Transition (3)
-                state.node = Ct1Received(
+                _set_scka_node(state, Ct1Received(
                     epoch=self.epoch,
                     auth=self.auth,
                     dk=self.dk,
@@ -295,8 +296,8 @@ class HeaderSent(SckaNode):
                     ek_vector=self.ek_vector,
                     ct1=ct1,
                     ek_encoder=self.ek_encoder,
-                )
-        return SckaReceiveResult(receiving_epoch=self.epoch - 1, output_key=None)
+                ))
+        return SckaReceiveResult(receiving_epoch=msg.epoch - 1, output_key=None)
 
 
 @dataclass
@@ -324,7 +325,7 @@ class Ct1Received(SckaNode):
 
             # Update state
             # Transition (4)
-            state.node = EkSentCt1Received(
+            _set_scka_node(state, EkSentCt1Received(
                 epoch=self.epoch,
                 auth=self.auth,
                 dk=self.dk,
@@ -332,8 +333,8 @@ class Ct1Received(SckaNode):
                 ek_vector=self.ek_vector,
                 ct1=self.ct1,
                 ct2_decoder=ct2_decoder,
-            )
-        return SckaReceiveResult(receiving_epoch=self.epoch - 1, output_key=None)
+            ))
+        return SckaReceiveResult(receiving_epoch=msg.epoch - 1, output_key=None)
 
 
 @dataclass
@@ -375,16 +376,16 @@ class EkSentCt1Received(SckaNode):
 
                 # Update state and return key
                 # Transition (5)
-                state.node = NoHeaderReceived(
+                _set_scka_node(state, NoHeaderReceived(
                     epoch=self.epoch + 1,
                     auth=self.auth,
                     header_decoder=header_decoder,
-                )
+                ))
                 return SckaReceiveResult(
-                    receiving_epoch=self.epoch - 1,
+                    receiving_epoch=msg.epoch - 1,
                     output_key=SckaOutputKey(epoch=self.epoch, key=ss),
                 )
-        return SckaReceiveResult(receiving_epoch=self.epoch - 1, output_key=None)
+        return SckaReceiveResult(receiving_epoch=msg.epoch - 1, output_key=None)
 
 
 @dataclass
@@ -417,13 +418,13 @@ class NoHeaderReceived(SckaNode):
 
                 # Update state
                 # Transition (6)
-                state.node = HeaderReceived(
+                _set_scka_node(state, HeaderReceived(
                     epoch=self.epoch,
                     auth=self.auth,
                     ek_header=ek_header,
                     ek_decoder=ek_decoder,
-                )
-        return SckaReceiveResult(receiving_epoch=self.epoch - 1, output_key=None)
+                ))
+        return SckaReceiveResult(receiving_epoch=msg.epoch - 1, output_key=None)
 
 
 @dataclass
@@ -448,7 +449,7 @@ class HeaderReceived(SckaNode):
 
         # Update state
         # Transition (7)
-        state.node = Ct1Sampled(
+        _set_scka_node(state, Ct1Sampled(
             epoch=self.epoch,
             auth=self.auth,
             ek_header=self.ek_header,
@@ -456,7 +457,7 @@ class HeaderReceived(SckaNode):
             ct1=ct1,
             ct1_encoder=ct1_encoder,
             ek_decoder=self.ek_decoder,
-        )
+        ))
         msg = SpqrSckaMessage(epoch=self.epoch, msg_type=SpqrMessageType.CT1, data=chunk)
         return SckaSendResult(
             msg=msg,
@@ -467,7 +468,7 @@ class HeaderReceived(SckaNode):
 
     def receive(self, state: BraidProtocolState, msg: SpqrSckaMessage) -> SckaReceiveResult:
         # No action taken
-        return SckaReceiveResult(receiving_epoch=self.epoch - 1, output_key=None)
+        return SckaReceiveResult(receiving_epoch=msg.epoch - 1, output_key=None)
 
 
 @dataclass
@@ -504,7 +505,7 @@ class Ct1Sampled(SckaNode):
 
                 # Update state
                 # Transition (10)
-                state.node = EkReceivedCt1Sampled(
+                _set_scka_node(state, EkReceivedCt1Sampled(
                     epoch=self.epoch,
                     auth=self.auth,
                     encaps_secret=self.encaps_secret,
@@ -512,8 +513,8 @@ class Ct1Sampled(SckaNode):
                     ek_header=self.ek_header,
                     ek_vector=ek_vector,
                     ct1_encoder=self.ct1_encoder,
-                )
-            return SckaReceiveResult(receiving_epoch=self.epoch - 1, output_key=None)
+                ))
+            return SckaReceiveResult(receiving_epoch=msg.epoch - 1, output_key=None)
 
         if msg.epoch == self.epoch and msg.msg_type == SpqrMessageType.EK_CT1_ACK:
             # Add ek_vector chunk (with acknowledgment)
@@ -536,24 +537,24 @@ class Ct1Sampled(SckaNode):
 
                 # Update state
                 # Transition (9)
-                state.node = Ct2Sampled(
+                _set_scka_node(state, Ct2Sampled(
                     epoch=self.epoch,
                     auth=self.auth,
                     ct2_encoder=ct2_encoder
-                )
+                ))
             else:
                 # Update state
                 # Transition (8)
-                state.node = Ct1Acknowledged(
+                _set_scka_node(state, Ct1Acknowledged(
                     epoch=self.epoch,
                     auth=self.auth,
                     encaps_secret=self.encaps_secret,
                     ek_header=self.ek_header,
                     ct1=self.ct1,
                     ek_decoder=self.ek_decoder,
-                )
+                ))
 
-        return SckaReceiveResult(receiving_epoch=self.epoch - 1, output_key=None)
+        return SckaReceiveResult(receiving_epoch=msg.epoch - 1, output_key=None)
 
 
 @dataclass
@@ -582,12 +583,12 @@ class EkReceivedCt1Sampled(SckaNode):
 
             # Update state
             # Transition (12)
-            state.node = Ct2Sampled(
+            _set_scka_node(state, Ct2Sampled(
                 epoch=self.epoch,
                 auth=self.auth,
                 ct2_encoder=ct2_encoder
-            )
-        return SckaReceiveResult(receiving_epoch=self.epoch - 1, output_key=None)
+            ))
+        return SckaReceiveResult(receiving_epoch=msg.epoch - 1, output_key=None)
 
 
 @dataclass
@@ -627,12 +628,12 @@ class Ct1Acknowledged(SckaNode):
 
                 # Update state
                 # Transition (11)
-                state.node = Ct2Sampled(
+                _set_scka_node(state, Ct2Sampled(
                     epoch=self.epoch,
                     auth=self.auth,
                     ct2_encoder=ct2_encoder
-                )
-        return SckaReceiveResult(receiving_epoch=self.epoch - 1, output_key=None)
+                ))
+        return SckaReceiveResult(receiving_epoch=msg.epoch - 1, output_key=None)
 
 
 @dataclass
@@ -652,10 +653,10 @@ class Ct2Sampled(SckaNode):
         if msg.epoch == self.epoch + 1:
             # Next epoch has begun
             # Transition (13)
-            state.node = KeysUnsampled(epoch=self.epoch + 1, auth=self.auth)
+            _set_scka_node(state, KeysUnsampled(epoch=self.epoch + 1, auth=self.auth))
             return SckaReceiveResult(receiving_epoch=self.epoch, output_key=None)
 
-        return SckaReceiveResult(receiving_epoch=self.epoch - 1, output_key=None)
+        return SckaReceiveResult(receiving_epoch=msg.epoch - 1, output_key=None)
 
 
 def InitAlice(shared_secret: bytes) -> BraidProtocolState:
@@ -675,6 +676,18 @@ def _require_scka_node(node: object) -> SckaNode:
     if isinstance(node, SckaNode):
         return node
     raise ValueError("Invalid SCKA state node")
+
+
+def _remember_scka_node(state: BraidProtocolState, node: SckaNode) -> None:
+    if hasattr(state, "node_history") and isinstance(state.node_history, dict):
+        state.node_history[node.epoch] = copy.deepcopy(node)
+
+
+def _set_scka_node(state: BraidProtocolState, node: SckaNode) -> None:
+    current = state.node if isinstance(state.node, SckaNode) else None
+    if current is not None:
+        _remember_scka_node(state, current)
+    state.node = node
 
 
 def SCKASend(state: BraidProtocolState) -> SckaSendResult:
@@ -731,8 +744,12 @@ def initialize_session_from_pqxdh(sk: bytes) -> SpqrSessionState:
 
 def ClearOldEpochs(state: SpqrRatchetState, sending_epoch: int) -> None:
     old_epoch = sending_epoch - 2
-    if old_epoch in state.kdfchains:
-        del state.kdfchains[old_epoch]
+    old_chains = state.kdfchains.get(old_epoch)
+    if old_chains is not None:
+        # Keep the receive chain available for late pending deliveries.
+        old_chains.send = None
+        if old_chains.receive is None:
+            del state.kdfchains[old_epoch]
     if old_epoch in state.MKSKIPPED:
         del state.MKSKIPPED[old_epoch]
 
