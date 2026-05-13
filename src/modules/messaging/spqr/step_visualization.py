@@ -4,7 +4,7 @@ from typing import Any, Callable
 
 import flet as ft
 
-from components.data_classes import SpqrHeader, SpqrRatchetState
+from components.data_classes import SpqrHeader, SpqrRatchetState, SpqrSckaMessage, SpqrMessageType
 from modules.base_steps import (
     func_node,
     normalize_step_titles,
@@ -19,10 +19,6 @@ from modules.messaging.messaging_base_steps import (
     pqxdh_header_preview,
     build_header_split_step,
     build_bootstrap_init_step,
-    build_chunk_send_steps,
-    build_message_step,
-    build_none_send_steps,
-    build_send_result_step,
 )
 
 
@@ -44,10 +40,21 @@ def _tt(key: str) -> str:
     return message if message else "Tooltip missing in src/assets/tooltips.json"
 
 
-def _header_preview(header: SpqrHeader | None) -> str:
+def _header_preview(header: SpqrHeader | SpqrSckaMessage | dict | None) -> str:
     if header is None:
         return "No header"
-    return f"epoch={header.msg.epoch}, type={header.msg.msg_type.value}, n={header.n}"
+    if isinstance(header, dict):
+        parts: list[str] = []
+        for key, value in header.items():
+            if isinstance(value, (bytes, bytearray)):
+                
+                parts.append(f"{key}={value.hex()[-8:]}")
+            else:
+                parts.append(f"{key}={str(value)}")
+        return ", ".join(parts)
+    if isinstance(header, SpqrSckaMessage):
+        return f"epoch={header.epoch}, type={header.msg_type.value}, data={header.data.hex()[-8:] if header.data else 'None'}"
+    return f"epoch={header.msg.epoch}, type={header.msg.msg_type.value}, n={header.n}, data={header.msg.data.hex()[-8:] if header.msg.data else 'None'}"
 
 
 def _before_after_rows(snapshot: dict[str, Any], tooltips: dict[str, str]) -> list[tuple[str, str, str | None, Any]]:
@@ -100,6 +107,12 @@ def _send_keys_unsampled(step_data: dict[str, Any], tooltips: dict[str, str]) ->
     chunk = header.msg.data if header is not None else None
     msg_epoch = header.msg.epoch if header is not None else after.get("epoch")
     sending_epoch = msg_epoch - 1 if isinstance(msg_epoch, int) else "self.epoch - 1"
+    
+    scka_message_value = SpqrSckaMessage(
+        epoch=msg_epoch,
+        msg_type=SpqrMessageType.HDR,
+        data=chunk
+    )
 
     return [
         {
@@ -207,41 +220,21 @@ def _send_keys_unsampled(step_data: dict[str, Any], tooltips: dict[str, str]) ->
                         wrap=True,
                     ),
                     ft.Text("↓", size=24),
-                    func_node(
-                        "Build SpqrMessage",
-                        width=220,
-                        height=70,
-                        tooltip=_tt("spqr_step_build_message"),
-                        full_value={
-                            "epoch": msg_epoch,
-                            "msg_type": "Hdr",
-                            "data": chunk,
-                        },
-                    ),
+                    func_node("Build SckaMessage",tooltip=_tt("spqr_step_build_message")),
                     ft.Text("↓", size=24),
-                    ft.Row(
-                        controls=[
-                            var_node("epoch", tooltip=_tt("spqr_step_msg_epoch"), full_value=msg_epoch),
-                            var_node(
-                                label="msg.type",
-                                value="Hdr",
-                                width=220,
-                                tooltip=_tt("spqr_step_msg_type"),
-                                full_value="SpqrMessageType.HDR",
-                            ),
-                            var_node("msg.data", tooltip=_tt("spqr_step_msg_data"), full_value=chunk),
-                        ],
-                        alignment=ft.MainAxisAlignment.CENTER,
-                        spacing=16,
-                        wrap=True,
-                    ),
+                    var_node("SckaMessage",
+                             tooltip=_tt("spqr_step_msg_epoch"),
+                             width=600,
+                             full_value=scka_message_value,
+                             value=_header_preview(scka_message_value)
+                             ),
                 ],
                 spacing=6,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             ),
         },
         {
-            "title": "Send result",
+            "title": "Scka send result",
             "control": ft.Column(
                 controls=[
                     ft.Text("Send result", weight="bold"),
@@ -290,7 +283,7 @@ def _send_keys_sampled(step_data: dict[str, Any], tooltips: dict[str, str]) -> l
         build_title="Build message with header chunk",
         chunk_expr="chunk = header_encoder.next_chunk()",
         msg_type_label="Hdr",
-        msg_type_full="SpqrMessageType.HDR",
+        msg_type_full=SpqrMessageType.HDR,
         next_state="KeysSampled",
     )
 
@@ -305,7 +298,7 @@ def _send_header_sent(step_data: dict[str, Any], tooltips: dict[str, str]) -> li
         build_title="Build message with ek_vector chunk",
         chunk_expr="chunk = ek_encoder.next_chunk()",
         msg_type_label="Ek",
-        msg_type_full="SpqrMessageType.EK",
+        msg_type_full=SpqrMessageType.EK,
         next_state="HeaderSent",
     )
 
@@ -320,7 +313,7 @@ def _send_ct1_received(step_data: dict[str, Any], tooltips: dict[str, str]) -> l
         build_title="Build message with ek_vector chunk and acknowledgment",
         chunk_expr="chunk = ek_encoder.next_chunk()",
         msg_type_label="EkCt1Ack",
-        msg_type_full="SpqrMessageType.EK_CT1_ACK",
+        msg_type_full=SpqrMessageType.EK_CT1_ACK,
         next_state="Ct1Received",
     )
 
@@ -331,7 +324,7 @@ def _send_ek_sent_ct1_received(step_data: dict[str, Any], tooltips: dict[str, st
         msg_epoch=ctx["msg_epoch"],
         sending_epoch=ctx["sending_epoch"],
         msg_type_label="None",
-        msg_type_full="SpqrMessageType.NONE",
+        msg_type_full=SpqrMessageType.NONE,
         next_state="EkSentCt1Received",
     )
 
@@ -342,7 +335,7 @@ def _send_no_header_received(step_data: dict[str, Any], tooltips: dict[str, str]
         msg_epoch=ctx["msg_epoch"],
         sending_epoch=ctx["sending_epoch"],
         msg_type_label="None",
-        msg_type_full="SpqrMessageType.NONE",
+        msg_type_full=SpqrMessageType.NONE,
         next_state="NoHeaderReceived",
     )
 
@@ -474,12 +467,12 @@ def _send_header_received(step_data: dict[str, Any], tooltips: dict[str, str]) -
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             ),
         },
-        *_build_message_step(
+        *build_message_step(
             build_title="Build message with ct1 chunk",
             chunk=ctx["chunk"],
             msg_epoch=ctx["msg_epoch"],
             msg_type_label="Ct1",
-            msg_type_full="SpqrMessageType.CT1",
+            msg_type_full=SpqrMessageType.CT1,
         ),
         _build_send_result_step(
             sending_epoch=ctx["sending_epoch"],
@@ -500,7 +493,7 @@ def _send_ct1_sampled(step_data: dict[str, Any], tooltips: dict[str, str]) -> li
         build_title="Build message with ct1 chunk",
         chunk_expr="chunk = ct1_encoder.next_chunk()",
         msg_type_label="Ct1",
-        msg_type_full="SpqrMessageType.CT1",
+        msg_type_full=SpqrMessageType.CT1,
         next_state="Ct1Sampled",
     )
 
@@ -515,7 +508,7 @@ def _send_ek_received_ct1_sampled(step_data: dict[str, Any], tooltips: dict[str,
         build_title="Build message with ct1 chunk",
         chunk_expr="chunk = ct1_encoder.next_chunk()",
         msg_type_label="Ct1",
-        msg_type_full="SpqrMessageType.CT1",
+        msg_type_full=SpqrMessageType.CT1,
         next_state="EkReceivedCt1Sampled",
     )
 
@@ -526,7 +519,7 @@ def _send_ct1_acknowledged(step_data: dict[str, Any], tooltips: dict[str, str]) 
         msg_epoch=ctx["msg_epoch"],
         sending_epoch=ctx["sending_epoch"],
         msg_type_label="None",
-        msg_type_full="SpqrMessageType.NONE",
+        msg_type_full=SpqrMessageType.NONE,
         next_state="Ct1Acknowledged",
     )
 
@@ -541,25 +534,8 @@ def _send_ct2_sampled(step_data: dict[str, Any], tooltips: dict[str, str]) -> li
         build_title="Build message with ct2 chunk",
         chunk_expr="chunk = ct2_encoder.next_chunk()",
         msg_type_label="Ct2",
-        msg_type_full="SpqrMessageType.CT2",
+        msg_type_full=SpqrMessageType.CT2,
         next_state="Ct2Sampled",
-    )
-
-
-def _build_message_step(
-    build_title: str,
-    chunk: Any,
-    msg_epoch: Any,
-    msg_type_label: str,
-    msg_type_full: str,
-) -> list[dict[str, Any]]:
-    return build_message_step(
-        build_title=build_title,
-        chunk=chunk,
-        msg_epoch=msg_epoch,
-        msg_type_label=msg_type_label,
-        msg_type_full=msg_type_full,
-        tt=_tt,
     )
 
 
@@ -574,7 +550,6 @@ def _build_send_result_step(
         output_key_label=output_key_label,
         output_key=output_key,
         next_state=next_state,
-        tt=_tt,
     )
 
 
@@ -586,7 +561,7 @@ def _build_chunk_send_steps(
     build_title: str,
     chunk_expr: str,
     msg_type_label: str,
-    msg_type_full: str,
+    msg_type_full: SpqrMessageType,
     next_state: str,
 ) -> list[dict[str, Any]]:
     return build_chunk_send_steps(
@@ -599,7 +574,6 @@ def _build_chunk_send_steps(
         msg_type_label=msg_type_label,
         msg_type_full=msg_type_full,
         next_state=next_state,
-        tt=_tt,
     )
 
 
@@ -607,7 +581,7 @@ def _build_none_send_steps(
     msg_epoch: Any,
     sending_epoch: Any,
     msg_type_label: str,
-    msg_type_full: str,
+    msg_type_full: SpqrMessageType,
     next_state: str,
 ) -> list[dict[str, Any]]:
     return build_none_send_steps(
@@ -616,7 +590,6 @@ def _build_none_send_steps(
         msg_type_label=msg_type_label,
         msg_type_full=msg_type_full,
         next_state=next_state,
-        tt=_tt,
     )
 
 
@@ -789,6 +762,201 @@ def _build_send_steps(state_name: str, step_data: dict[str, Any], tooltips: dict
     if builder is None:
         return []
     return builder(step_data, tooltips)
+
+
+def build_message_step(
+    build_title: str,
+    chunk: Any,
+    msg_epoch: Any,
+    msg_type_label: str,
+    msg_type_full: SpqrMessageType,
+) -> list[dict[str, Any]]:
+    
+    scka_message_value = SpqrSckaMessage(
+        epoch=msg_epoch,
+        msg_type=msg_type_full,
+        data=chunk
+    )
+    return [
+        {
+            "title": build_title,
+            "control": ft.Column(
+                controls=[
+                    ft.Text(build_title, weight="bold"),
+                    ft.Row(
+                        controls=[
+                            var_node("chunk", full_value=chunk, tooltip=_tt("spqr_step_chunk_in_msg")),
+                            var_node("epoch", value=msg_epoch, tooltip=_tt("spqr_step_epoch_in_msg")),
+                            var_node(
+                                "msg.type",
+                                value=msg_type_label,
+                                width=220,
+                                tooltip=_tt("spqr_step_msg_type_in_msg"),
+                                full_value=msg_type_full,
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        spacing=16,
+                        wrap=True,
+                    ),
+                    ft.Text("↓", size=24),
+                    func_node("Build SckaMessage", tooltip=_tt("spqr_step_build_message")
+                    ),
+                    ft.Text("↓", size=24),
+                    var_node("SckaMessage",
+                             tooltip=_tt("spqr_step_msg_epoch"),
+                             width=600,
+                             full_value=scka_message_value,
+                             value=_header_preview(scka_message_value)
+                             ),
+                ],
+                spacing=6,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        }
+    ]
+
+
+def build_send_result_step(
+    sending_epoch: Any,
+    output_key_label: str,
+    output_key: Any,
+    next_state: str,
+) -> dict[str, Any]:
+    return {
+        "title": "Scka send result",
+        "control": ft.Column(
+            controls=[
+                ft.Text("Scka send result", weight="bold"),
+                ft.Row(
+                    controls=[
+                        var_node("sending_epoch", value=sending_epoch, tooltip=_tt("spqr_step_sending_epoch")),
+                        var_node(
+                            "output_key",
+                            value=output_key_label,
+                            width=220,
+                            tooltip=_tt("spqr_step_output_key"),
+                            full_value=output_key,
+                        ),
+                        var_node(
+                            "next_state",
+                            value=next_state,
+                            width=220,
+                            tooltip=_tt("spqr_step_next_state"),
+                            full_value=next_state,
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=16,
+                    wrap=True,
+                ),
+            ],
+            spacing=6,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+    }
+
+
+def build_chunk_send_steps(
+    chunk: Any,
+    msg_epoch: Any,
+    sending_epoch: Any,
+    generate_title: str,
+    build_title: str,
+    chunk_expr: str,
+    msg_type_label: str,
+    msg_type_full: SpqrMessageType,
+    next_state: str,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "title": generate_title,
+            "control": ft.Column(
+                controls=[
+                    ft.Text(generate_title, weight="bold"),
+                    func_node(
+                        "Encoder.next_chunk",
+                        tooltip=_tt("spqr_step_next_chunk"),
+                    ),
+                    ft.Text("↓", size=24),
+                    var_node("chunk", full_value=chunk, tooltip=_tt("spqr_step_chunk")),
+                ],
+                spacing=6,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        },
+        *build_message_step(
+            build_title=build_title,
+            chunk=chunk,
+            msg_epoch=msg_epoch,
+            msg_type_label=msg_type_label,
+            msg_type_full=msg_type_full,
+        ),
+        build_send_result_step(
+            sending_epoch=sending_epoch,
+            output_key_label="None",
+            output_key=None,
+            next_state=next_state,
+        ),
+    ]
+
+
+def build_none_send_steps(
+    msg_epoch: Any,
+    sending_epoch: Any,
+    msg_type_label: str,
+    msg_type_full: SpqrMessageType,
+    next_state: str,
+) -> list[dict[str, Any]]:
+    
+    scka_message_value = SpqrSckaMessage(
+        epoch=msg_epoch,
+        msg_type=msg_type_full,
+        data=None
+    )
+    return [
+        {
+            "title": "Build message with no data to send",
+            "control": ft.Column(
+                controls=[
+                    ft.Text("Build message with no data to send", weight="bold"),
+                    ft.Row(
+                        controls=[
+                            var_node("data", value="None", width=220, tooltip=_tt("spqr_step_chunk_in_msg"), full_value=None),
+                            var_node("epoch", value=msg_epoch, tooltip=_tt("spqr_step_epoch_in_msg")),
+                            var_node(
+                                "msg.type",
+                                value=msg_type_label,
+                                width=220,
+                                tooltip=_tt("spqr_step_msg_type_in_msg"),
+                                full_value=msg_type_full,
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        spacing=16,
+                        wrap=True,
+                    ),
+                    ft.Text("↓", size=24),
+                    func_node("Build SckaMessage", tooltip=_tt("spqr_step_build_message")),
+                    ft.Text("↓", size=24),
+                    var_node("SckaMessage",
+                             tooltip=_tt("spqr_step_msg_epoch"),
+                             width=600,
+                             full_value=scka_message_value,
+                             value=_header_preview(scka_message_value)
+                             ),
+                ],
+                spacing=6,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        },
+        build_send_result_step(
+            sending_epoch=sending_epoch,
+            output_key_label="None",
+            output_key=None,
+            next_state=next_state,
+        ),
+    ]
 
 
 def _receive_keys_sampled(step_data: dict[str, Any], tooltips: dict[str, str]) -> list[dict[str, Any]]:
@@ -1409,7 +1577,7 @@ def _receive_ct1_received(step_data: dict[str, Any], tooltips: dict[str, str]) -
                     ft.Text("↓", size=24),
                     var_node("chunk", full_value=chunk, tooltip=_tt("spqr_step_chunk")),
                     ft.Text("↓", size=24),
-                    func_node("ct2_decoder = Decoder_new(CT2_SIZE + MAC_SIZE)", tooltip=_tt("spqr_step_decoder_init")),
+                    func_node("new ct2_decoder()", tooltip=_tt("spqr_step_decoder_init")),
                 ],
                 spacing=6,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1600,8 +1768,8 @@ def _build_send_message_pipeline_phase2_steps(step_data: dict[str, Any], tooltip
                     ft.Text("Build SPQR header", weight="bold"),
                     ft.Row(
                         controls=[
-                            var_node("msg", full_value=_header_preview(header), tooltip=_tt("spqr_step_header")),
-                            var_node("n", full_value=header.n if header is not None else None, tooltip=_tt("spqr_step_msg_epoch")),
+                            var_node("SckaMessage", value=_header_preview(header_msg if header_msg is not None else None), width=320, tooltip=_tt("spqr_step_header"), full_value=header_msg.to_dict()),
+                            var_node("n", full_value=header.n if header is not None else None, tooltip=_tt("spqr_step_header_n")),
                         ],
                         alignment=ft.MainAxisAlignment.CENTER,
                         spacing=16,
@@ -1610,11 +1778,11 @@ def _build_send_message_pipeline_phase2_steps(step_data: dict[str, Any], tooltip
                     ft.Text("↓", size=24),
                     func_node(
                         "Build SpqrHeader",
-                        tooltip=_tt("spqr_step_build_message"),
+                        tooltip=_tt("spqr_step_build_header"),
                     ),
                     ft.Text("↓", size=24),
                     var_node(
-                        "header",
+                        "Header",
                         value=_header_preview(header),
                         width=420,
                         tooltip=_tt("spqr_step_header"),
