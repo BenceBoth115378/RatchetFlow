@@ -78,6 +78,11 @@ class ModuleStatePersistence:
         self.file_picker = ft.FilePicker()
         self.page.services.append(self.file_picker)
 
+        self.file_picker.on_upload = self._noop_upload_handler
+
+    def _noop_upload_handler(self, e):
+        pass
+
     def build_controls(self) -> ft.Row:
         save_disabled = not bool(self.app_state.current_module)
         return ft.Row(
@@ -157,6 +162,10 @@ class ModuleStatePersistence:
 
         upload_root = WEB_UPLOAD_DIR / "loads"
         upload_root.mkdir(parents=True, exist_ok=True)
+
+        return await self._do_web_file_upload(selected_file)
+
+    async def _do_web_file_upload(self, selected_file: ft.FilePickerFile) -> Path:
         relative_upload_path = Path("loads") / f"{uuid4().hex}_{Path(selected_file.name).name}"
         upload_url = self.page.get_upload_url(relative_upload_path.as_posix(), 60)
 
@@ -164,6 +173,7 @@ class ModuleStatePersistence:
         upload_error: dict[str, str | None] = {"message": None}
         loop = asyncio.get_running_loop()
         previous_handler = self.file_picker.on_upload
+        expected_name = selected_file.name
 
         def _mark_finished(error_message: str | None = None) -> None:
             if error_message is not None:
@@ -172,17 +182,21 @@ class ModuleStatePersistence:
                 completion.set()
 
         def _handle_upload(event: ft.FilePickerUploadEvent) -> None:
-            if previous_handler is not None:
-                previous_handler(event)
+            if previous_handler is not None and previous_handler != self._noop_upload_handler:
+                try:
+                    previous_handler(event)
+                except Exception:
+                    pass
 
             if event.error:
                 loop.call_soon_threadsafe(_mark_finished, event.error)
                 return
 
-            if event.file_name == selected_file.name and event.progress == 1.0:
+            if event.file_name == expected_name and event.progress == 1.0:
                 loop.call_soon_threadsafe(_mark_finished)
 
         self.file_picker.on_upload = _handle_upload
+
         try:
             await self.file_picker.upload(
                 [
@@ -193,7 +207,7 @@ class ModuleStatePersistence:
                     )
                 ]
             )
-            await asyncio.wait_for(completion.wait(), timeout=60)
+            await asyncio.wait_for(completion.wait(), timeout=30)
         finally:
             self.file_picker.on_upload = previous_handler
 
